@@ -11,12 +11,17 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Repository
 
 public interface PostLikeRepository extends JpaRepository<PostLike,Long> {
     Long countByPost(Post post);
+
+    @Query("SELECT pl.post.id, COUNT(pl) FROM PostLike pl WHERE pl.post.id IN :postIds GROUP BY pl.post.id")
+    List<Object[]> countByPostIds(@Param("postIds") List<Long> postIds);
 
     Optional<PostLike> findByPostAndUser(Post post, User user);
 

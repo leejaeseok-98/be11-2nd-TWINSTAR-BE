@@ -51,7 +51,7 @@ public class UserController {
     }
 //  1.로그인
     @PostMapping("/doLogin")
-    public ResponseEntity<?> doLogin(@RequestBody LoginDto dto) {
+    public ResponseEntity<LoginResponseDto> doLogin(@RequestBody LoginDto dto) {
 //        id,email, password 검증
         User user = userService.login(dto);
 //        토큰 생성 및 return
@@ -61,12 +61,9 @@ public class UserController {
         redisTemplate.opsForValue().set(user.getEmail(),refreshToken,200, TimeUnit.DAYS);//200일 ttl
 //        사용자에게 at,rt지급
 
-        Map<String, Object> loginInfo = new HashMap<>();
-        loginInfo.put("id", user.getId());
-        loginInfo.put("token", token);
-        loginInfo.put("refreshToken", refreshToken);
+        LoginResponseDto loginResponseDto = new LoginResponseDto(user.getId(), token, refreshToken);
 
-        return new ResponseEntity<>(loginInfo, HttpStatus.OK);
+        return new ResponseEntity<>(loginResponseDto, HttpStatus.OK);
     }
 //  2.회원가입
     @PostMapping("/create")
@@ -78,7 +75,7 @@ public class UserController {
     // 이메일 중복 체크
     @GetMapping("/check-email/{email}")
     public ResponseEntity<?> checkEmailDuplicate(@PathVariable String email) {
-        boolean isDuplicate = userService.findByEmail(email).isPresent();
+        boolean isDuplicate = userService.existsByEmail(email);
         Map<String, Boolean> response = new HashMap<>(); //프론트에서 json으로 값을 주기 위해 Map사용 {"duplicate": true} 또는 {"duplicate": false} 형식
         response.put("duplicate", isDuplicate);
         return ResponseEntity.ok(response);
@@ -222,19 +219,19 @@ public class UserController {
     }
 
 //    13.  계정 정지 (관리자 전용)
-    @PostMapping("/admin/ban")
+    @PostMapping("/admin/{userId}/ban")
     @PreAuthorize("hasRole('ADMIN')") // 관리자만 접근 가능
-    public ResponseEntity<?> suspendUser(@RequestParam Integer days) {
-        userService.banUser(days);
+    public ResponseEntity<?> suspendUser(@PathVariable Long userId, @RequestParam(required = false) Integer days) {
+        userService.banUser(userId, days);
         String message = (days == null) ? "사용자 계정이 무기한 정지되었습니다." : "사용자 계정이 " + days + "일 동안 정지되었습니다.";
         return new ResponseEntity<>(new CommonDto(HttpStatus.OK.value(),message,null),HttpStatus.OK);
     }
 
 //    14. 계정 정지 해제 (관리자 전용)
-    @PostMapping("/{userId}/unban")
+    @PostMapping("/admin/{userId}/unban")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<String> unsuspendUser(@PathVariable Long userId) {
-        userService.unbanUser();
+        userService.unbanUser(userId);
         return ResponseEntity.ok("사용자 계정 정지가 해제되었습니다.");
     }
 

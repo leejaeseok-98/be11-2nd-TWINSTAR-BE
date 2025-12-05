@@ -23,6 +23,8 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
     @Query("SELECT u FROM User u WHERE LOWER(u.email) = LOWER(:email)")
     Optional<User> findByEmail(@Param("email") String email);
 
+    boolean existsByEmail(String email);
+
 //    회원id로 게시물 찾는 쿼리
     @Query("SELECT u FROM User u LEFT JOIN FETCH u.posts WHERE u.id = :userId")
     Optional<User> findByIdWithPosts(@Param("userId") Long userId);
