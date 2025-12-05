@@ -28,9 +28,11 @@ import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
 import org.apache.tomcat.util.http.parser.Authorization;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
 import org.springframework.security.core.Authentication;
@@ -63,8 +65,9 @@ public class UserService {
     private final CommentRepository commentRepository;
     private final PostRepository postRepository;
     private final S3Service s3Service;
+    private final RedisTemplate<String, Object> redisTemplate;
 
-    public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder, FollowRepository followRepository, PostLikeRepository postLikeRepository, CommentRepository commentRepository, PostRepository postRepository, S3Service s3Service) {
+    public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder, FollowRepository followRepository, PostLikeRepository postLikeRepository, CommentRepository commentRepository, PostRepository postRepository, S3Service s3Service, @Qualifier("rtdb") RedisTemplate<String, Object> redisTemplate) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.followRepository = followRepository;
@@ -72,6 +75,7 @@ public class UserService {
         this.commentRepository = commentRepository;
         this.postRepository = postRepository;
         this.s3Service = s3Service;
+        this.redisTemplate = redisTemplate;
     }
 
 //   1. 로그인
@@ -79,10 +83,31 @@ public class UserService {
         User user = userRepository.findByEmail(dto.getEmail())
                 .orElseThrow(() -> new LoginFailedException("email 또는 비밀번호가 일치하지 않습니다."));
 
+        if (user.getDelYn() == YN.Y) {
+            throw new LoginFailedException("탈퇴한 계정입니다.");
+        }
+
+        if (user.getUserStatus() == UserStatus.BAN) {
+            throw new LoginFailedException("정지된 계정입니다.");
+        }
+
         if(!passwordEncoder.matches(dto.getPassword(), user.getPassword())){
             throw new LoginFailedException("email 또는 비밀번호가 일치하지 않습니다.");
         }
         return user;
+    }
+
+    @Transactional
+    public void logout(Authentication authentication) {
+        if (authentication == null || authentication.getName() == null) {
+            throw new AuthenticationCredentialsNotFoundException("인증 정보가 존재하지 않습니다.");
+        }
+        // Redis에서 Refresh Token 삭제
+        // User ID를 기반으로 User를 찾고, 그 User의 email을 키로 사용
+        Long userId = Long.valueOf(authentication.getName());
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new EntityNotFoundException("User not found"));
+        redisTemplate.delete(user.getEmail());
     }
 
 //   2. 회원가입
@@ -216,6 +241,13 @@ public class UserService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
+        // 2. 닉네임 변경 시 중복 확인
+        if (dto.getNickName() != null && !user.getNickName().equals(dto.getNickName())) {
+            if (userRepository.existsByNickName(dto.getNickName())) {
+                throw new DuplicateNicknameException("이미 사용 중인 닉네임입니다.");
+            }
+        }
+
         user.updateProfile(dto.getNickName(),dto.getProfileTxt(),dto.getIdVisibility(),dto.getSex());
 
         userRepository.save(user);
@@ -236,6 +268,9 @@ public class UserService {
 
         // 상태 변경 메서드 호출
         user.deleteUser();
+
+        // Redis에서 Refresh Token 삭제
+        redisTemplate.delete(user.getEmail());
 
         userRepository.save(user); // 변경사항 저장
     }

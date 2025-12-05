@@ -65,6 +65,13 @@ public class UserController {
 
         return new ResponseEntity<>(loginResponseDto, HttpStatus.OK);
     }
+
+    @PostMapping("/logout")
+    public ResponseEntity<?> logout(Authentication authentication) {
+        userService.logout(authentication);
+        return new ResponseEntity<>(new CommonDto(HttpStatus.OK.value(), "Logged out successfully", null), HttpStatus.OK);
+    }
+
 //  2.회원가입
     @PostMapping("/create")
     public ResponseEntity<?> create(@Valid @RequestBody UserSaveReq dto) {
@@ -94,23 +101,10 @@ public class UserController {
 
 
     //  리프레시 토큰을 이용한 액세스 토큰 재발급
-    // --to do
-//    API 요청을 보낼 때, 액세스 토큰이 만료되었는지 확인
-//    만료되었다면 /user/refresh-token API를 호출하여 새 액세스 토큰을 받아오기
-//    새로운 액세스 토큰으로 다시 API 요청을 보냄
-//    새로 받은 액세스 토큰을 저장 (로컬 스토리지 or 쿠키)
-//    3.rt발행
     @PostMapping("/refresh-token")
-    public ResponseEntity<Map<String, String>> refreshAccessToken(@RequestHeader("Authorization") String refreshToken) {
-        if (refreshToken.startsWith("Bearer ")) {
-            refreshToken = refreshToken.substring(7);
-        }
-
-        String newAccessToken = jwtTokenProvider.refreshAccessToken(refreshToken);
-
-        Map<String, String> response = new HashMap<>();
-        response.put("accessToken", newAccessToken);
-        return ResponseEntity.ok(response);
+    public ResponseEntity<RefreshTokenResponseDto> refreshAccessToken(@RequestBody RefreshTokenRequestDto requestDto) {
+        String newAccessToken = jwtTokenProvider.refreshAccessToken(requestDto.getRefreshToken());
+        return ResponseEntity.ok(new RefreshTokenResponseDto(newAccessToken));
     }
 
 //    4. 비밀번호 변경
