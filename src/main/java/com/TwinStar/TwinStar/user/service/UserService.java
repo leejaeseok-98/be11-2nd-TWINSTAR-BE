@@ -175,8 +175,10 @@ public class UserService {
         // 프로필 이미지 URL 설정
         String profileImgUrl = (targetUser.getProfileImg() != null) ? targetUser.getProfileImg() : DEFAULT_PROFILE_IMG;
 
-        // 게시물 목록 조회
-        List<Post> posts = postRepository.findByUserId(receiveUserId);
+        List<Post> posts = postRepository.findByUserIdWithFiles(receiveUserId);
+        if (posts.isEmpty()) {
+            return UserProfileDto.profileSearch(targetUser, followerCount, followingCount, profileImgUrl, new ArrayList<>());
+        }
         List<Long> postIds = posts.stream().map(Post::getId).collect(Collectors.toList());
 
         Map<Long, Long> postLikeCounts = postLikeRepository.countByPostIds(postIds).stream()

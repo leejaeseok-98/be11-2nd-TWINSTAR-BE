@@ -18,6 +18,9 @@ import java.util.List;
 public interface PostRepository extends JpaRepository<Post,Long> {
     List<Post> findByUserId(Long userId);
 
+    @Query("SELECT p FROM Post p LEFT JOIN FETCH p.postFile WHERE p.user.id = :userId")
+    List<Post> findByUserIdWithFiles(@Param("userId") Long userId);
+
     // 특정 유저가 볼 수 있는 게시물 조회 (전체 공개 또는 맞팔 유저의 팔로우 공개 게시물)
     @Query("""
         SELECT p FROM Post p 
