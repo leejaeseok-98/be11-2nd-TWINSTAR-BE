@@ -78,6 +78,16 @@ public class UserService {
         this.redisTemplate = redisTemplate;
     }
 
+    private User getCurrentUser() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || authentication.getName() == null || "anonymousUser".equals(authentication.getName())) {
+            throw new AuthenticationCredentialsNotFoundException("인증 정보가 존재하지 않습니다.");
+        }
+        Long userId = Long.valueOf(authentication.getName());
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new EntityNotFoundException("User not found with id: " + userId));
+    }
+
 //   1. 로그인
     public User login(LoginDto dto){
         User user = userRepository.findByEmail(dto.getEmail())
@@ -98,15 +108,8 @@ public class UserService {
     }
 
     @Transactional
-    public void logout(Authentication authentication) {
-        if (authentication == null || authentication.getName() == null) {
-            throw new AuthenticationCredentialsNotFoundException("인증 정보가 존재하지 않습니다.");
-        }
-        // Redis에서 Refresh Token 삭제
-        // User ID를 기반으로 User를 찾고, 그 User의 email을 키로 사용
-        Long userId = Long.valueOf(authentication.getName());
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new EntityNotFoundException("User not found"));
+    public void logout() {
+        User user = getCurrentUser();
         redisTemplate.delete(user.getEmail());
     }
 
@@ -136,10 +139,7 @@ public class UserService {
     }
 
     public UserProfileDto searchProfile(Long receiveUserId) throws NoSuchElementException, RuntimeException {
-        // 현재 로그인한 사용자
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        User currentUser = userRepository.findById(Long.valueOf(authentication.getName()))
-                .orElseThrow(() -> new EntityNotFoundException("user not found"));
+        User currentUser = getCurrentUser();
 
         // 조회하려는 사용자
         User targetUser = userRepository.findById(receiveUserId)
@@ -175,6 +175,7 @@ public class UserService {
         // 프로필 이미지 URL 설정
         String profileImgUrl = (targetUser.getProfileImg() != null) ? targetUser.getProfileImg() : DEFAULT_PROFILE_IMG;
 
+        // 게시물 목록과 파일 정보를 함께 조회 (N+1 문제 해결)
         List<Post> posts = postRepository.findByUserIdWithFiles(receiveUserId);
         if (posts.isEmpty()) {
             return UserProfileDto.profileSearch(targetUser, followerCount, followingCount, profileImgUrl, new ArrayList<>());
@@ -213,15 +214,7 @@ public class UserService {
 //    프로필 이미지 업로드
     @Transactional
     public String updateProfileImage(MultipartFile file) throws IOException{
-
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if(authentication == null || authentication.getName() == null){
-            throw new AuthenticationCredentialsNotFoundException("인증 정보가 존재하지 않습니다");
-        }
-        Long userId = Long.valueOf(authentication.getName());
-        // 1. 사용자 조회
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+        User user = getCurrentUser();
 
 //        새 이미지 업록드
         String imageUrl = s3Service.uploadFile(file, file.getOriginalFilename());
@@ -233,15 +226,7 @@ public class UserService {
 //    프로필 텍스트 수정
     @Transactional
     public void updateProfileText(ProfileTextUpdateDto dto){
-
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if(authentication == null || authentication.getName() == null){
-            throw new AuthenticationCredentialsNotFoundException("인증 정보가 존재하지 않습니다");
-        }
-        Long userId = Long.valueOf(authentication.getName());
-        // 1. 사용자 조회
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+        User user = getCurrentUser();
 
         // 2. 닉네임 변경 시 중복 확인
         if (dto.getNickName() != null && !user.getNickName().equals(dto.getNickName())) {
@@ -259,14 +244,10 @@ public class UserService {
 //   6. 회원탈퇴
     @Transactional
     public void deleteUser() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || authentication.getName() == null) {
-            throw new AuthenticationCredentialsNotFoundException("인증 정보가 존재하지 않습니다.");
+        User user = getCurrentUser();
+        if (user.getDelYn() == YN.Y) {
+            throw new IllegalStateException("이미 탈퇴 처리된 사용자입니다.");
         }
-        Long userId = Long.parseLong(authentication.getName());
-        // userId를 이용하여 유저 조회
-        User user = userRepository.findByIdAndDelYn(userId, YN.N)
-                .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다."));
 
         // 상태 변경 메서드 호출
         user.deleteUser();
@@ -279,12 +260,13 @@ public class UserService {
 
 //   7. 비밀번호 변경
     @Transactional
-    public void changePassword(Long id, PasswordChangeRequest request, Authentication authentication){
+    public void changePassword(Long id, PasswordChangeRequest request){
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다."));
 
+        User currentUser = getCurrentUser();
         // 본인 인증 확인
-        if (!user.getId().toString().equals(authentication.getName())){
+        if (!user.getId().equals(currentUser.getId())){
             throw new SecurityException("비밀번호 변경 권한이 없습니다.");
         }
 
@@ -313,19 +295,12 @@ public class UserService {
 //    9. 계정범위 변경
     @Transactional
     public void changeIdVisibility(Visibility newStatus){
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || authentication.getName() == null) {
-            throw new AuthenticationCredentialsNotFoundException("인증 정보가 존재하지 않습니다.");
-        }
-
         // newStatus가 null이면 예외 발생
         if (newStatus == null) {
             throw new IllegalArgumentException("변경할 계정 범위 값이 없습니다.");
         }
 
-
-        Long userId = Long.valueOf(authentication.getName());
-        User user = userRepository.findById(userId).orElseThrow(()->new IllegalArgumentException("User is not found"));
+        User user = getCurrentUser();
 
         // 기존 상태와 변경하려는 상태가 같으면 업데이트 불필요
         if (user.getIdVisibility() == newStatus) {
@@ -348,17 +323,17 @@ public class UserService {
         Specification<User> spec = (root, query, criteriaBuilder) -> {
             List<Predicate> predicates = new ArrayList<>();
 
-            System.out.println("검색 요청 - nickname: " + nickName); // 디버깅 로그
-
             if (StringUtils.hasText(nickName)) {
-                predicates.add(criteriaBuilder.like(root.get("nickname"), "%" + nickName + "%"));
+                predicates.add(criteriaBuilder.like(
+                        criteriaBuilder.lower(root.get("nickName")), // 필드명 'nickname' -> 'nickName'으로 수정
+                        "%" + nickName.toLowerCase() + "%"
+                ));
             }
 
             return criteriaBuilder.and(predicates.toArray(new Predicate[0]));
         };
 
         Page<User> result = userRepository.findAll(spec, pageable);
-        System.out.println("검색 결과 개수: " + result.getTotalElements());
         return result.map(ChatUserListDto::new);
     }
 
@@ -369,7 +344,7 @@ public class UserService {
 
             if (StringUtils.hasText(nickName)) {
                 predicates.add(criteriaBuilder.like(
-                        criteriaBuilder.lower(root.get("nickName")), // nickname -> nickName으로 수정
+                        criteriaBuilder.lower(root.get("nickName")),
                         "%" + nickName.toLowerCase() + "%"
                 ));
             }
@@ -389,7 +364,7 @@ public class UserService {
 //                root : 엔티티의 속성을 접근하기 위한 객체, criteriabuilder : 쿼리를 생성하기 위한 객체
                 List<Predicate> predicates = new ArrayList<>();
                 if (dto.getNickName() != null){
-                    predicates.add(criteriaBuilder.equal(root.get("nickname"),dto.getNickName()));
+                    predicates.add(criteriaBuilder.equal(root.get("nickName"),dto.getNickName())); // 필드명 'nickname' -> 'nickName'으로 수정
                 }
                 Predicate[] predicateArr = new Predicate[predicates.size()];
                 for (int i =0; i<predicates.size();i++){
@@ -412,17 +387,14 @@ public class UserService {
 //  14. 관리자 권한 부여 메소드
     @Transactional
     public void grantAdminRole(Long userid) {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        Long myId = Long.valueOf(authentication.getName());
-        User myUser =  userRepository.findById(myId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+        User myUser = getCurrentUser();
         User receiveUser = userRepository.findById(userid)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
 //        ADMIN이 아니면 권한이 없어서 부여할수없음
         if (myUser.getAdminYn()!=(AdminYn.ADMIN)){
             throw new AccessDeniedException("권한없음");
         }
-        if (myId == userid){
+        if (myUser.getId().equals(userid)){
             throw new AccessDeniedException("자신의 계정에 권한부여 및 회수를 할 수 없음");
         }
         // 삭제된 계정인지 확인
@@ -435,16 +407,13 @@ public class UserService {
 //   15. 관리자 권한 회수 메소드
     @Transactional
     public void revokeAdminRole(Long userid) {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        Long myId = Long.valueOf(authentication.getName());
-        User myUser =  userRepository.findById(myId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+        User myUser = getCurrentUser();
         User receiveUser = userRepository.findById(userid)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
         if (myUser.getAdminYn()!=(AdminYn.ADMIN)){
             throw new AccessDeniedException("권한없음");
         }
-        if (myId == userid){
+        if (myUser.getId().equals(userid)){
             throw new AccessDeniedException("자신의 계정에 권한부여 및 회수를 할 수 없음");
         }
         // 삭제된 계정인지 확인

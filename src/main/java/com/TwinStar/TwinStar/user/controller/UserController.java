@@ -67,8 +67,8 @@ public class UserController {
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<?> logout(Authentication authentication) {
-        userService.logout(authentication);
+    public ResponseEntity<?> logout() {
+        userService.logout();
         return new ResponseEntity<>(new CommonDto(HttpStatus.OK.value(), "Logged out successfully", null), HttpStatus.OK);
     }
 
@@ -109,10 +109,9 @@ public class UserController {
 
 //    4. 비밀번호 변경
     @PatchMapping("/{id}/password")
-    public ResponseEntity<?> changePassword(@PathVariable Long id, @RequestBody PasswordChangeRequest request
-            , Authentication authentication){
+    public ResponseEntity<?> changePassword(@PathVariable Long id, @RequestBody PasswordChangeRequest request){
 
-        userService.changePassword(id, request,authentication);
+        userService.changePassword(id, request);
         return new ResponseEntity<>(new CommonDto(HttpStatus.OK.value(),"Password changed successfully",null),HttpStatus.OK);
 
     }
