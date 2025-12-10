@@ -1,7 +1,6 @@
 package com.TwinStar.TwinStar.user.service;
 
 
-import com.TwinStar.TwinStar.comment.repository.CommentLikeRepository;
 import com.TwinStar.TwinStar.comment.repository.CommentRepository;
 import com.TwinStar.TwinStar.common.domain.Visibility;
 import com.TwinStar.TwinStar.common.domain.YN;
@@ -23,11 +22,7 @@ import com.TwinStar.TwinStar.user.domain.UserStatus;
 import com.TwinStar.TwinStar.user.dto.*;
 import com.TwinStar.TwinStar.user.repository.UserRepository;
 import jakarta.persistence.EntityNotFoundException;
-import jakarta.persistence.criteria.CriteriaBuilder;
-import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Predicate;
-import jakarta.persistence.criteria.Root;
-import org.apache.tomcat.util.http.parser.Authorization;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -36,14 +31,12 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
-import software.amazon.awssdk.services.s3.endpoints.internal.Value;
 
 
 import java.io.IOException;
@@ -51,7 +44,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -318,61 +310,45 @@ public class UserService {
                 .map(user -> new ChatUserListDto(user)); // User → ChatUserListDto 변환
     }
 
+    private Specification<User> byNickNameContains(String nickName) {
+        return (root, query, criteriaBuilder) -> {
+            if (StringUtils.hasText(nickName)) {
+                return criteriaBuilder.like(
+                        criteriaBuilder.lower(root.get("nickName")),
+                        "%" + nickName.toLowerCase() + "%"
+                );
+            }
+            return null;
+        };
+    }
+
 //  11.  채팅유저 검색
     public Page<ChatUserListDto> searchChatUsers(String nickName, Pageable pageable) {
-        Specification<User> spec = (root, query, criteriaBuilder) -> {
-            List<Predicate> predicates = new ArrayList<>();
-
-            if (StringUtils.hasText(nickName)) {
-                predicates.add(criteriaBuilder.like(
-                        criteriaBuilder.lower(root.get("nickName")), // 필드명 'nickname' -> 'nickName'으로 수정
-                        "%" + nickName.toLowerCase() + "%"
-                ));
-            }
-
-            return criteriaBuilder.and(predicates.toArray(new Predicate[0]));
-        };
-
+        Specification<User> spec = byNickNameContains(nickName);
         Page<User> result = userRepository.findAll(spec, pageable);
         return result.map(ChatUserListDto::new);
     }
 
     //  11-1.  관리자용 유저목록 검색
     public Page<UserListDto> searchListUsers(String nickName, Pageable pageable) {
-        Specification<User> spec = (root, query, criteriaBuilder) -> {
-            List<Predicate> predicates = new ArrayList<>();
-
-            if (StringUtils.hasText(nickName)) {
-                predicates.add(criteriaBuilder.like(
-                        criteriaBuilder.lower(root.get("nickName")),
-                        "%" + nickName.toLowerCase() + "%"
-                ));
-            }
-
-            return predicates.isEmpty() ? null : criteriaBuilder.and(predicates.toArray(new Predicate[0]));
-        };
-
-        return userRepository.findAll(spec, pageable).map(user ->
-                user.listFromEntity());
+        Specification<User> spec = byNickNameContains(nickName);
+        return userRepository.findAll(spec, pageable).map(User::listFromEntity);
     }
 
 //  12. 관리자용 유저 리스트
     public Page<UserListDto> userList(Pageable pageable, UserSearchDto dto){
-        Specification<User> spec = new Specification<User>() {
-            @Override
-            public Predicate toPredicate(Root<User> root, CriteriaQuery<?> query, CriteriaBuilder criteriaBuilder) {
+        Specification<User> spec = (root, query, criteriaBuilder) -> {
 //                root : 엔티티의 속성을 접근하기 위한 객체, criteriabuilder : 쿼리를 생성하기 위한 객체
-                List<Predicate> predicates = new ArrayList<>();
-                if (dto.getNickName() != null){
-                    predicates.add(criteriaBuilder.equal(root.get("nickName"),dto.getNickName())); // 필드명 'nickname' -> 'nickName'으로 수정
-                }
-                Predicate[] predicateArr = new Predicate[predicates.size()];
-                for (int i =0; i<predicates.size();i++){
-                    predicateArr[i] = predicates.get(i);
-                }
-                Predicate predicate = criteriaBuilder.and(predicateArr);
-                return predicate;
+            List<Predicate> predicates = new ArrayList<>();
+            if (dto.getNickName() != null){
+                predicates.add(criteriaBuilder.equal(root.get("nickName"),dto.getNickName())); // 필드명 'nickname' -> 'nickName'으로 수정
             }
+            Predicate[] predicateArr = new Predicate[predicates.size()];
+            for (int i =0; i<predicates.size();i++){
+                predicateArr[i] = predicates.get(i);
+            }
+            Predicate predicate = criteriaBuilder.and(predicateArr);
+            return predicate;
         };
         return userRepository.findAll(spec,pageable).map(user-> user.listFromEntity());
     }
@@ -383,43 +359,32 @@ public class UserService {
         return UserDetailDto.detailList(user);
     }
 
+    private User checkAdminPrivilegeAndGetTargetUser(Long targetUserId) {
+        User adminUser = getCurrentUser();
+        if (adminUser.getAdminYn() != AdminYn.ADMIN) {
+            throw new AccessDeniedException("관리자 권한이 없습니다.");
+        }
+        if (adminUser.getId().equals(targetUserId)) {
+            throw new AccessDeniedException("자신의 계정에 대한 권한을 변경할 수 없습니다.");
+        }
+        User targetUser = userRepository.findById(targetUserId)
+                .orElseThrow(() -> new EntityNotFoundException("대상 사용자를 찾을 수 없습니다."));
+        if (targetUser.getDelYn() == YN.Y) {
+            throw new IllegalStateException("삭제된 계정의 권한을 변경할 수 없습니다.");
+        }
+        return targetUser;
+    }
 
 //  14. 관리자 권한 부여 메소드
     @Transactional
     public void grantAdminRole(Long userid) {
-        User myUser = getCurrentUser();
-        User receiveUser = userRepository.findById(userid)
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
-//        ADMIN이 아니면 권한이 없어서 부여할수없음
-        if (myUser.getAdminYn()!=(AdminYn.ADMIN)){
-            throw new AccessDeniedException("권한없음");
-        }
-        if (myUser.getId().equals(userid)){
-            throw new AccessDeniedException("자신의 계정에 권한부여 및 회수를 할 수 없음");
-        }
-        // 삭제된 계정인지 확인
-        if (receiveUser.getDelYn() == YN.Y) {
-            throw new IllegalStateException("삭제된 계정의 권한을 변경할 수 없습니다.");
-        }
-
+        User receiveUser = checkAdminPrivilegeAndGetTargetUser(userid);
         receiveUser.changeAdmin(AdminYn.ADMIN);
     }
 //   15. 관리자 권한 회수 메소드
     @Transactional
     public void revokeAdminRole(Long userid) {
-        User myUser = getCurrentUser();
-        User receiveUser = userRepository.findById(userid)
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
-        if (myUser.getAdminYn()!=(AdminYn.ADMIN)){
-            throw new AccessDeniedException("권한없음");
-        }
-        if (myUser.getId().equals(userid)){
-            throw new AccessDeniedException("자신의 계정에 권한부여 및 회수를 할 수 없음");
-        }
-        // 삭제된 계정인지 확인
-        if (receiveUser.getDelYn() == YN.Y) {
-            throw new IllegalStateException("삭제된 계정의 권한을 변경할 수 없습니다.");
-        }
+        User receiveUser = checkAdminPrivilegeAndGetTargetUser(userid);
         receiveUser.changeAdmin(AdminYn.USER);
     }
 

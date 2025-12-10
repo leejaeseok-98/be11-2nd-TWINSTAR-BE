@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  # 1. MariaDB 서비스
+  mariadb:
+    image: mariadb:latest
+    container_name: mariadb_docker
+    restart: always
+    ports:
+      - "3307:3306"  # 내컴퓨터포트:컨테이너포트
+    environment:
+      MYSQL_ROOT_PASSWORD: 1234  # 루트 비밀번호
+      MYSQL_DATABASE: twinstar # 자동으로 생성될 DB 이름
+      TZ: Asia/Seoul
+    volumes:
+      - ./mariadb-data:/var/lib/mysql # [중요] DB 데이터를 프로젝트 폴더 내 db_data에 저장 (삭제 방지)
+    # [핵심] 한글 설정 및 슬로우 쿼리 로그 설정
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --slow-query-log=1          # 느린 쿼리 로그 켜기
+      - --long-query-time=2         # 2초 이상 걸리면 기록 (필요시 1초로 수정)
+
+  # 2. Redis 서비스
+  redis:
+    image: redis:alpine
+    container_name: myredis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./redis-data:/data # Redis 데이터도 날아가면 안 되니까 저장
+    command: redis-server --appendonly yes # 데이터 지속성 옵션 켜기
+
+  # 3. RabbitMQ
+  rabbitmq:
+    # [중요] 'management' 태그가 붙은 이미지를 써야 웹 관리자 화면(GUI)을 쓸 수 있습니다.
+    image: rabbitmq:management
+    container_name: my-rabit
+    restart: always
+    ports:
+      - "5672:5672"   # AMQP 포트 (Spring Boot가 통신하는 포트)
+      - "15692:15692" # Management UI 포트 (웹 브라우저 접속용)
+    environment:
+      RABBITMQ_DEFAULT_USER: guest # 기본 ID
+      RABBITMQ_DEFAULT_PASS: guest # 기본 비번
+    volumes:
+      - ./rabbitmq-data:/var/lib/rabbitmq # 데이터 영구 저장
