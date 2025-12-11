@@ -23,11 +23,11 @@ public class Follow {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
-    private User userId; // 팔로우를 한사람 (나)
+    private User user; // 팔로우를 한사람 (나)
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "receive_user_id", nullable = false)
-    private User receiveUserId; // 팔로우를 당한사람 (카리나)
+    private User receiveUser; // 팔로우를 당한사람 (카리나)
 
     @Column(nullable = false)
     @Enumerated(EnumType.STRING)
@@ -40,9 +40,9 @@ public class Follow {
         }
     }
 
-    public Follow(User userId, User receiveUserId) {
-        this.userId = userId;
-        this.receiveUserId = receiveUserId;
+    public Follow(User user, User receiveUser) {
+        this.user = user;
+        this.receiveUser = receiveUser;
         this.followYn = YN.Y; // 새로 생성 시 기본값 Y
     }
 

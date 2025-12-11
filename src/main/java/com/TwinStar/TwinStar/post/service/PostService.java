@@ -156,32 +156,32 @@ public class PostService {
         User loginUser = userRepository.findById(Long.valueOf(authentication.getName()))
                 .orElseThrow(() -> new EntityNotFoundException("User not found"));
 
-        List<Long> followingUserIds = followRepository.findFollowingUserIds(loginUser.getId());
-        List<Long> mutualFollowUserIds = followRepository.findMutualFollowUserIds(loginUser.getId());
+//        List<Long> followingUserIds = followRepository.findFollowingUserIds(loginUser.getId());
+//        List<Long> mutualFollowUserIds = followRepository.findMutualFollowUserIds(loginUser.getId());
 
-        List<Long> accessibleUserIds = new ArrayList<>(followingUserIds);
-        accessibleUserIds.addAll(mutualFollowUserIds);
-        accessibleUserIds.add(loginUser.getId());
+//        List<Long> accessibleUserIds = new ArrayList<>(followingUserIds);
+//        accessibleUserIds.addAll(mutualFollowUserIds);
+//        accessibleUserIds.add(loginUser.getId());
 
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdTime")); // 최신순 정렬
 
-        if (accessibleUserIds.isEmpty()) {
-            return postRepository.findVisiblePostsForUser(Visibility.ALL, List.of(-1L), pageable)
-                    .map(post -> {
-                        String isFollow = followRepository.existsByUserIdAndReceiveUserIdAndFollowYn(loginUser,post.getUser(), YN.Y)||loginUser.equals(post.getUser()) ? "Y" : "N";
-                        List<String> hashTags = post.getHashTag().stream()
-                                .map(postHashTag -> postHashTag.getHashTag().getHashTagName())
-                                .collect(Collectors.toList());
+//        if (followingUserIds.isEmpty()) {
+//            return postRepository.findVisiblePostsForUser(Visibility.ALL, List.of(-1L), pageable)
+//                    .map(post -> {
+//                        String isFollow = followRepository.existsByUserAndReceiveUserAndFollowYn(loginUser,post.getUser(), YN.Y)||loginUser.equals(post.getUser()) ? "Y" : "N";
+//                        List<String> hashTags = post.getHashTag().stream()
+//                                .map(postHashTag -> postHashTag.getHashTag().getHashTagName())
+//                                .collect(Collectors.toList());
+//
+//                        return PostListResDto.fromEntity(post, 0L, 0L, hashTags, "N",isFollow);
+//                    });
+//        }
 
-                        return PostListResDto.fromEntity(post, 0L, 0L, hashTags, "N",isFollow);
-                    });
-        }
-
-        return postRepository.findVisiblePostsForUser(Visibility.ALL, accessibleUserIds, pageable)
+        return postRepository.findFeedPostsForUser(loginUser.getId(), pageable)
                 .map(post -> {
                     Long likeCount = postRepository.countPostLikes(post.getId());
                     Long commentCount = postRepository.countPostComments(post.getId());
-                    String isFollow = followRepository.existsByUserIdAndReceiveUserIdAndFollowYn(loginUser,post.getUser(), YN.Y)||loginUser.equals(post.getUser()) ? "Y" : "N";
+                    String isFollow = followRepository.existsByUserAndReceiveUserAndFollowYn(loginUser,post.getUser(), YN.Y)||loginUser.equals(post.getUser()) ? "Y" : "N";
 
                     List<String> hashTags = post.getHashTag().stream()
                             .map(postHashTag -> postHashTag.getHashTag().getHashTagName())
@@ -226,7 +226,7 @@ public class PostService {
         boolean isLiked = postLikeRepository.existsByPostIdAndUserId(postId, user.getId());
         String isLike = isLiked ? "Y" : "N";
 
-        String isFollow = followRepository.existsByUserIdAndReceiveUserIdAndFollowYn(user,post.getUser(), YN.Y)||user.equals(post.getUser()) ? "Y" : "N";
+        String isFollow = followRepository.existsByUserAndReceiveUserAndFollowYn(user,post.getUser(), YN.Y)||user.equals(post.getUser()) ? "Y" : "N";
 
         // DTO 변환 후 반환
         return PostDetailResDto.fromEntity(post, postLikeCount, commentList, hashTags, isLike, isFollow);
@@ -244,7 +244,7 @@ public class PostService {
 
         // 각 유저와 로그인한 유저 간의 팔로우 여부 확인
         return likedUsers.map(user -> {
-            String isFollow = followRepository.existsByUserIdAndReceiveUserIdAndFollowYn(loginUser,user, YN.Y)||user.equals(loginUser) ? "Y" : "N";
+            String isFollow = followRepository.existsByUserAndReceiveUserAndFollowYn(loginUser,user, YN.Y)||user.equals(loginUser) ? "Y" : "N";
 
             return new UserListResDto().toUserListResDto(user, isFollow);
         });

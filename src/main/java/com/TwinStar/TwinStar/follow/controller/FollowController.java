@@ -25,13 +25,9 @@ public class FollowController {
 
 //    토글 팔로우/언팔로우 요청
     @PostMapping("/toggle/{receiveUserId}")
-    public ResponseEntity<?> toggleFollow(
-            @PathVariable Long receiveUserId,@RequestHeader(HttpHeaders.AUTHORIZATION) String authorizationHeader
-    ) {
-        String token = authorizationHeader.replace("Bearer ", "");
-        // 토큰에서 userId 추출
-        Long userId = jwtUtil.getUserId(token);
-        boolean isFollowing = followService.toggleFollow(userId, receiveUserId);
+    public ResponseEntity<?> toggleFollow(@PathVariable Long receiveUserId) {
+
+        boolean isFollowing = followService.toggleFollow(receiveUserId);
 
         if (isFollowing) {
             return new ResponseEntity<>(new CommonDto(HttpStatus.OK.value(), "팔로우 되었습니다.",isFollowing),HttpStatus.OK);

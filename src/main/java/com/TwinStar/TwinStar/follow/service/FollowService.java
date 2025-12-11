@@ -10,6 +10,7 @@ import com.TwinStar.TwinStar.user.domain.User;
 import com.TwinStar.TwinStar.follow.repository.FollowRepository;
 import com.TwinStar.TwinStar.user.dto.UserListResDto;
 import com.TwinStar.TwinStar.user.repository.UserRepository;
+import com.TwinStar.TwinStar.user.service.UserService;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -29,31 +30,35 @@ public class FollowService {
     private final UserRepository userRepository;
     private final AlarmService alarmService;
     private final AlarmRepository alarmRepository;
+    private final UserService userService;
 
-    public FollowService(FollowRepository followRepository, UserRepository userRepository, AlarmService alarmService, AlarmRepository alarmRepository) {
+    public FollowService(FollowRepository followRepository, UserRepository userRepository, AlarmService alarmService, AlarmRepository alarmRepository, UserService userService) {
         this.followRepository = followRepository;
         this.userRepository = userRepository;
         this.alarmService = alarmService;
         this.alarmRepository = alarmRepository;
+        this.userService = userService;
     }
 
     //    토글 팔로우/언팔로우 요청
     @Transactional
-    public boolean toggleFollow(Long userId, Long receiveUserId) {
+    public boolean toggleFollow(Long receiveUserId) {
+        Long userId = userService.getCurrentUser().getId();
+
         User followRequest = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("팔로워가 존재하지 않습니다."));
         User receiveFollowRequest = userRepository.findById(receiveUserId)
                 .orElseThrow(() -> new IllegalArgumentException("팔로잉 대상이 존재하지 않습니다."));
 
         // 팔로우 상태 확인
-        Optional<Follow> existingFollow = followRepository.findByUserIdAndReceiveUserId(followRequest,receiveFollowRequest);
+        Optional<Follow> existingFollow = followRepository.findByUserAndReceiveUser(followRequest,receiveFollowRequest);
 
         String content= followRequest.getNickName()+"님이 회원님을 팔로우합니다.";
-        String url = "https://www.alexandrelax.store/profile/"+followRequest.getId();
+//        String url = "https://www.alexandrelax.store/profile/"+followRequest.getId();
+        String url = "http://localhost:8080/profile/"+followRequest.getId();
         if(!alarmRepository.existsByUrlAndContent(url,content)){
             alarmService.createAlarm(receiveFollowRequest,content,url);
         }
-
 
         if (existingFollow.isPresent()) {
             Follow follow = existingFollow.get();
@@ -73,7 +78,7 @@ public class FollowService {
     public Long countByReceiveUserIdAndFollowYn(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("유저를 찾을 수 없습니다."));
-        return Optional.ofNullable(followRepository.countByReceiveUserIdAndFollowYn(user, YN.Y))
+        return Optional.ofNullable(followRepository.countByReceiveUserAndFollowYn(user, YN.Y))
                 .orElse(0L); //nullpointexception방지 위한 0값 설정
     }
 
@@ -83,7 +88,7 @@ public class FollowService {
                 .orElseThrow(() -> new IllegalArgumentException("유저를 찾을 수 없습니다."));
 //        return Optional.ofNullable(followRepository.countByUserIdAndFollowYn(user))
 //                .orElse(0L);
-        return Optional.ofNullable(followRepository.countByUserIdAndFollowYn(user, YN.Y))
+        return Optional.ofNullable(followRepository.countByUserAndFollowYn(user, YN.Y))
                 .orElse(0L);
     }
 
@@ -92,12 +97,12 @@ public class FollowService {
         User loginUser = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("유저가 존재하지 않습니다."));
 
-        Page<User> followUserList = followRepository.findByReceiveUserIdAndFollowYn(loginUser,YN.Y,pageable)
-                .map(follow -> follow.getUserId());
+        Page<User> followUserList = followRepository.findByReceiveUserAndFollowYn(loginUser,YN.Y,pageable)
+                .map(follow -> follow.getUser());
 
         // 각 유저와 로그인한 유저 간의 팔로우 여부 확인
         return followUserList.map(user -> {
-            String isFollow = followRepository.existsByUserIdAndReceiveUserIdAndFollowYn(loginUser,user, YN.Y)||user.equals(loginUser) ? "Y" : "N";
+            String isFollow = followRepository.existsByUserAndReceiveUserAndFollowYn(loginUser,user, YN.Y)||user.equals(loginUser) ? "Y" : "N";
 
             return new FollowDto(user,isFollow);
         });
@@ -109,12 +114,12 @@ public class FollowService {
                 .orElseThrow(() -> new IllegalArgumentException("유저가 존재하지 않습니다."));
 
         // 내가 팔로우한 유저 목록을 가져옴
-        Page<User> followingUsers = followRepository.findByUserIdAndFollowYn(loginUser, YN.Y, pageable)
-                .map(Follow::getReceiveUserId); // 내가 팔로우한 대상 유저 반환
+        Page<User> followingUsers = followRepository.findByUserAndFollowYn(loginUser, YN.Y, pageable)
+                .map(Follow::getReceiveUser); // 내가 팔로우한 대상 유저 반환
 
         // 각 유저와 로그인한 유저 간의 팔로우 여부 확인 후 DTO 변환
         return followingUsers.map(user -> {
-            String isFollow = followRepository.existsByUserIdAndReceiveUserIdAndFollowYn(loginUser, user, YN.Y) || user.equals(loginUser) ? "Y" : "N";
+            String isFollow = followRepository.existsByUserAndReceiveUserAndFollowYn(loginUser, user, YN.Y) || user.equals(loginUser) ? "Y" : "N";
             return new FollowDto(user, isFollow);
         });
     }
@@ -123,7 +128,7 @@ public class FollowService {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         User user = userRepository.findById(Long.valueOf(authentication.getName())).orElseThrow(() -> new EntityNotFoundException("User not found"));
         User targetUser = userRepository.findById(userId).orElseThrow(() -> new EntityNotFoundException("User not found"));
-        return followRepository.existsByUserIdAndReceiveUserIdAndFollowYn(user, targetUser, YN.Y);
+        return followRepository.existsByUserAndReceiveUserAndFollowYn(user, targetUser, YN.Y);
     }
 }
 

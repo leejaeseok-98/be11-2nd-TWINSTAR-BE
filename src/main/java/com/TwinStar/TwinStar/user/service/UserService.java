@@ -49,7 +49,7 @@ import java.util.stream.Collectors;
 @Service
 @Transactional(readOnly = true)
 public class UserService {
-    private static final String DEFAULT_PROFILE_IMG = "https://i.pinimg.com/474x/3b/73/a1/3b73a13983f88f84e130bb3fb29e17.jpg";
+    private static final String DEFAULT_PROFILE_IMG = "https://twinstar-s3-version3.s3.ap-northeast-2.amazonaws.com/defalut_img.png";
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final FollowRepository followRepository;
@@ -70,7 +70,7 @@ public class UserService {
         this.redisTemplate = redisTemplate;
     }
 
-    private User getCurrentUser() {
+    public User getCurrentUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || authentication.getName() == null || "anonymousUser".equals(authentication.getName())) {
             throw new AuthenticationCredentialsNotFoundException("인증 정보가 존재하지 않습니다.");
@@ -148,12 +148,12 @@ public class UserService {
         }
 
         // 팔로워/팔로잉 수 계산
-        Long followingCount = followRepository.countByReceiveUserIdAndFollowYn(targetUser, YN.Y);
-        Long followerCount = followRepository.countByUserIdAndFollowYn(targetUser, YN.Y); // 수정된 부분
+        Long followingCount = followRepository.countByReceiveUserAndFollowYn(targetUser, YN.Y);
+        Long followerCount = followRepository.countByUserAndFollowYn(targetUser, YN.Y); // 수정된 부분
 
         // 자신의 프로필이 아닐 경우 비공개 설정 체크
         if (!currentUser.equals(targetUser)) {
-            boolean isFollow = followRepository.existsByUserIdAndReceiveUserId(currentUser, targetUser);
+            boolean isFollow = followRepository.existsByUserAndReceiveUser(currentUser, targetUser);
 
             if (targetUser.getIdVisibility() == Visibility.ONLYME) {
                 throw new PrivateAccountException("이 계정은 비공개 상태입니다.");

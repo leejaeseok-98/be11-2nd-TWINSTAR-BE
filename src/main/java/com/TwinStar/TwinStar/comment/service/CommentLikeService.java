@@ -120,7 +120,7 @@ public class CommentLikeService {
 
         // 각 유저와 로그인한 유저 간의 팔로우 여부 확인
         return likedUsers.map(user -> {
-            String isFollow = followRepository.existsByUserIdAndReceiveUserIdAndFollowYn(loginUser,user, YN.Y)||user.equals(loginUser) ? "Y" : "N";
+            String isFollow = followRepository.existsByUserAndReceiveUserAndFollowYn(loginUser,user, YN.Y)||user.equals(loginUser) ? "Y" : "N";
 
             return new UserListResDto().toUserListResDto(user, isFollow);
         });
