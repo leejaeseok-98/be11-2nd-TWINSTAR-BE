@@ -61,6 +61,14 @@ public class PostController {
         return new ResponseEntity<>(new CommonDto(HttpStatus.OK.value(),"게시물 리스트 불러오기 완료",postListResDtoPage),HttpStatus.OK);
     }
 
+    @GetMapping("/list/{hashtag}")
+    public ResponseEntity<?> getHashtagPostList(@PathVariable String hashtag, @RequestParam(name = "page", defaultValue = "0") Integer page,
+                                                @RequestParam(name = "size", defaultValue = "5") Integer size){
+        Page<PostListResDto> getHashtagPostList = postService.getHashtagPostList(hashtag,page,size);
+        return new ResponseEntity<>(new CommonDto(HttpStatus.OK.value(), "해시태그 게시물 조회 완료", getHashtagPostList),HttpStatus.OK);
+    }
+
+
     @GetMapping("/detail/{postId}")
     public ResponseEntity<?> getPostDetail(@PathVariable Long postId) {
         PostDetailResDto postDetailResDto = postService.getDetail(postId);

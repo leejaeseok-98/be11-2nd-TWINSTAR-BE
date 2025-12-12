@@ -19,6 +19,7 @@ import com.TwinStar.TwinStar.post.repository.PostRepository;
 import com.TwinStar.TwinStar.user.domain.User;
 import com.TwinStar.TwinStar.user.dto.UserListResDto;
 import com.TwinStar.TwinStar.user.repository.UserRepository;
+import com.TwinStar.TwinStar.user.service.UserService;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.*;
@@ -48,6 +49,7 @@ public class PostService {
     private final CommentRepository commentRepository;
     private final CommentLikeRepository commentLikeRepository;
     private final PostLikeRepository postLikeRepository;
+    private final UserService userService;
 
     private final S3Client s3Client;
     @Value("${cloud.aws.s3.bucket}")
@@ -56,7 +58,7 @@ public class PostService {
     private String region;
 
     public PostService(PostRepository postRepository, UserRepository userRepository, PostFileRepository postFileRepository
-            , HashTagService hashTagService, PostHashTagRepository postHashTagRepository, FollowRepository followRepository, CommentRepository commentRepository, CommentLikeRepository commentLikeRepository, PostLikeRepository postLikeRepository, S3Client s3Client) {
+            , HashTagService hashTagService, PostHashTagRepository postHashTagRepository, FollowRepository followRepository, CommentRepository commentRepository, CommentLikeRepository commentLikeRepository, PostLikeRepository postLikeRepository, UserService userService, S3Client s3Client) {
         this.postRepository = postRepository;
         this.userRepository = userRepository;
         this.postFileRepository = postFileRepository;
@@ -66,6 +68,7 @@ public class PostService {
         this.commentRepository = commentRepository;
         this.commentLikeRepository = commentLikeRepository;
         this.postLikeRepository = postLikeRepository;
+        this.userService = userService;
         this.s3Client = s3Client;
     }
 
@@ -229,5 +232,26 @@ public class PostService {
 
             return new UserListResDto().toUserListResDto(user, isFollow);
         });
+    }
+
+    public Page<PostListResDto> getHashtagPostList(String hashtag,Integer page, Integer size) {
+        User loginUser = userService.getCurrentUser();
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdTime")); // 최신순 정렬
+
+        return postRepository.findVisiblePostsByHashtags(hashtag,loginUser.getId(), pageable)
+                .map(post -> {
+                    Long likeCount = postRepository.countPostLikes(post.getId());
+                    Long commentCount = postRepository.countPostComments(post.getId());
+                    String isFollow = followRepository.existsByUserAndReceiveUserAndFollowYn(loginUser,post.getUser(), YN.Y)||loginUser.equals(post.getUser()) ? "Y" : "N";
+
+                    List<String> hashTags = post.getHashTag().stream()
+                            .map(postHashTag -> postHashTag.getHashTag().getHashTagName())
+                            .collect(Collectors.toList());
+
+                    boolean isLiked = postLikeRepository.existsByPostIdAndUserId(post.getId(), loginUser.getId());
+                    String isLike = isLiked ? "Y" : "N";
+
+                    return PostListResDto.fromEntity(post, likeCount, commentCount, hashTags, isLike,isFollow);
+                });
     }
 }

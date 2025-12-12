@@ -1,6 +1,5 @@
 package com.TwinStar.TwinStar.comment.service;
 
-import com.TwinStar.TwinStar.alarm.controller.AlarmController;
 import com.TwinStar.TwinStar.alarm.service.AlarmService;
 import com.TwinStar.TwinStar.comment.domain.Comment;
 import com.TwinStar.TwinStar.comment.dto.CommentCreateReqDto;
@@ -17,8 +16,6 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.HashMap;
-import java.util.Map;
 
 @Service
 @Transactional

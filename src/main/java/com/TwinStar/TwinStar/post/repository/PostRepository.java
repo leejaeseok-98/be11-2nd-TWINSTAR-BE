@@ -1,9 +1,6 @@
 package com.TwinStar.TwinStar.post.repository;
 
-import com.TwinStar.TwinStar.common.domain.Visibility;
 import com.TwinStar.TwinStar.post.domain.Post;
-import com.TwinStar.TwinStar.post.domain.PostLike;
-import com.TwinStar.TwinStar.user.domain.User;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -11,7 +8,6 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
-import java.util.Collection;
 import java.util.List;
 
 @Repository
@@ -48,6 +44,31 @@ public interface PostRepository extends JpaRepository<Post,Long> {
                     ))
 """)
     Page<Post> findFeedPostsForUser(@Param("currentUserId") Long currentUserId, Pageable pageable);
+
+    @Query("""
+    SELECT DISTINCT p 
+    FROM Post p
+    JOIN p.hashTag pht
+    JOIN pht.hashTag h
+    WHERE 
+        h.hashTagName = :hashtag
+        
+        AND (
+            p.user.id = :currentUserId
+
+            OR p.user.idVisibility = 'ALL'
+            
+            OR (p.user.idVisibility = 'FOLLOW' AND p.user.id IN (
+                SELECT f.receiveUser.id FROM Follow f WHERE f.user.id = :currentUserId AND f.followYn = 'Y'
+            ))
+        )
+""")
+    Page<Post> findVisiblePostsByHashtags(
+            @Param("hashtag") String hashtag,
+            @Param("currentUserId") Long currentUserId,
+            Pageable pageable
+    );
+
 
 
     @Query("SELECT COUNT(pl) FROM PostLike pl WHERE pl.post.id = :postId")

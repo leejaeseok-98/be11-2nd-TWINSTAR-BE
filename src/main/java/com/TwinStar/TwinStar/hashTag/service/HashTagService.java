@@ -8,6 +8,9 @@ import com.TwinStar.TwinStar.hashTag.repository.PostHashTagRepository;
 import com.TwinStar.TwinStar.post.domain.Post;
 import com.TwinStar.TwinStar.post.repository.PostRepository;
 import jakarta.persistence.EntityNotFoundException;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,17 +37,20 @@ public class HashTagService {
     }
 
 //    해시태그로 게시물 조회
-    @Transactional(readOnly = true)//조회하는 메서드에서만 사용가능. 성능 최적화
-    public List<Post> findPostsByHashTag(HashTag hashTagName){
+    @Transactional(readOnly = true)
+    public List<Post> findPostsByHashTag(HashTag hashTagName,int page, int size){
         if (hashTagName == null || hashTagName.getHashTagName() == null) {
             throw new IllegalArgumentException("해시태그 값이 null입니다.");
         }
 //      해시태그를 조회해서 post게시물을 가져오기 위한 변수
         List<PostHashTag> postHashTags = postHashTagRepository.findByHashTag(hashTagName.getHashTagName());
 
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdTime")); // 최신순 정렬
+
         if (postHashTags.isEmpty()) {
             System.out.println("해당 해시태그로 등록된 게시물이 없습니다.");
         }
+
         return postHashTags.stream().map(PostHashTag::getPost).collect(Collectors.toList());
     }
 
