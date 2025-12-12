@@ -41,7 +41,7 @@ public class SecurityConfig {
                 .httpBasic(AbstractHttpConfigurer::disable) // HTTP Basic 인증 비활성화
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS)) // 세션 미사용 (Stateless)
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/user/create", "/user/doLogin", "/user/refresh-token","/connect/**","/user/check-email/{email}","/user/check-nickname/{nickname}","/post/health").permitAll() // 인증 없이 접근 허용
+                        .requestMatchers("/user/create", "/user/doLogin", "/user/refresh-token","/connect/**","/user/check-email/{email}","/user/check-nickname/{nickname}","/post/health","/actuator/prometheus").permitAll() // 인증 없이 접근 허용
                         .anyRequest().authenticated() // 그 외 모든 요청은 인증 필요
                 )
                 // 정지된 사용자 로그인 차단 필터 추가

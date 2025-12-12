@@ -38,6 +38,13 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-tomcat'
 	implementation 'org.springframework.boot:spring-boot-starter-websocket'
 	implementation 'software.amazon.awssdk:s3:2.20.35'
+    //P6SPY - 개발, 테스트환경에서만 사용가능
+    implementation 'com.github.gavlyukovskiy:p6spy-spring-boot-starter:1.9.0'
+    //스프링 부트 상태 정보 제공
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    // 프로메테우스가 이해할 수 있는 포맷으로 데이터 변환
+    implementation 'io.micrometer:micrometer-registry-prometheus'
+
 
 	//jwt토큰 관련
 	implementation 'io.jsonwebtoken:jjwt-api:0.11.5'
