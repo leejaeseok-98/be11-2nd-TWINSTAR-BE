@@ -156,26 +156,7 @@ public class PostService {
         User loginUser = userRepository.findById(Long.valueOf(authentication.getName()))
                 .orElseThrow(() -> new EntityNotFoundException("User not found"));
 
-//        List<Long> followingUserIds = followRepository.findFollowingUserIds(loginUser.getId());
-//        List<Long> mutualFollowUserIds = followRepository.findMutualFollowUserIds(loginUser.getId());
-
-//        List<Long> accessibleUserIds = new ArrayList<>(followingUserIds);
-//        accessibleUserIds.addAll(mutualFollowUserIds);
-//        accessibleUserIds.add(loginUser.getId());
-
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdTime")); // 최신순 정렬
-
-//        if (followingUserIds.isEmpty()) {
-//            return postRepository.findVisiblePostsForUser(Visibility.ALL, List.of(-1L), pageable)
-//                    .map(post -> {
-//                        String isFollow = followRepository.existsByUserAndReceiveUserAndFollowYn(loginUser,post.getUser(), YN.Y)||loginUser.equals(post.getUser()) ? "Y" : "N";
-//                        List<String> hashTags = post.getHashTag().stream()
-//                                .map(postHashTag -> postHashTag.getHashTag().getHashTagName())
-//                                .collect(Collectors.toList());
-//
-//                        return PostListResDto.fromEntity(post, 0L, 0L, hashTags, "N",isFollow);
-//                    });
-//        }
 
         return postRepository.findFeedPostsForUser(loginUser.getId(), pageable)
                 .map(post -> {
