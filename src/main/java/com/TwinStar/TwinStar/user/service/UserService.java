@@ -1,6 +1,7 @@
 package com.TwinStar.TwinStar.user.service;
 
 
+import com.TwinStar.TwinStar.comment.repository.CommentLikeRepository;
 import com.TwinStar.TwinStar.comment.repository.CommentRepository;
 import com.TwinStar.TwinStar.common.domain.Visibility;
 import com.TwinStar.TwinStar.common.domain.YN;
@@ -22,7 +23,11 @@ import com.TwinStar.TwinStar.user.domain.UserStatus;
 import com.TwinStar.TwinStar.user.dto.*;
 import com.TwinStar.TwinStar.user.repository.UserRepository;
 import jakarta.persistence.EntityNotFoundException;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
+import org.apache.tomcat.util.http.parser.Authorization;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -31,12 +36,14 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
+import software.amazon.awssdk.services.s3.endpoints.internal.Value;
 
 
 import java.io.IOException;
@@ -44,12 +51,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
 @Transactional(readOnly = true)
 public class UserService {
-    private static final String DEFAULT_PROFILE_IMG = "https://twinstar-s3-version3.s3.ap-northeast-2.amazonaws.com/defalut_img.png";
+    private static final String DEFAULT_PROFILE_IMG = "https://i.pinimg.com/474x/3b/73/a1/3b73a13983f88f84e130bb3fb29e17.jpg";
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final FollowRepository followRepository;
@@ -70,7 +78,7 @@ public class UserService {
         this.redisTemplate = redisTemplate;
     }
 
-    public User getCurrentUser() {
+    private User getCurrentUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || authentication.getName() == null || "anonymousUser".equals(authentication.getName())) {
             throw new AuthenticationCredentialsNotFoundException("인증 정보가 존재하지 않습니다.");
@@ -85,17 +93,10 @@ public class UserService {
         User user = userRepository.findByEmail(dto.getEmail())
                 .orElseThrow(() -> new LoginFailedException("email 또는 비밀번호가 일치하지 않습니다."));
 
-        if (user.getDelYn() == YN.Y) {
-            throw new LoginFailedException("탈퇴한 계정입니다.");
-        }
+        // User 객체에게 검증 위임
+        user.validateLogin();
+        user.validatePassword(dto.getPassword(), passwordEncoder);
 
-        if (user.getUserStatus() == UserStatus.BAN) {
-            throw new LoginFailedException("정지된 계정입니다.");
-        }
-
-        if(!passwordEncoder.matches(dto.getPassword(), user.getPassword())){
-            throw new LoginFailedException("email 또는 비밀번호가 일치하지 않습니다.");
-        }
         return user;
     }
 
@@ -237,11 +238,7 @@ public class UserService {
     @Transactional
     public void deleteUser() {
         User user = getCurrentUser();
-        if (user.getDelYn() == YN.Y) {
-            throw new IllegalStateException("이미 탈퇴 처리된 사용자입니다.");
-        }
-
-        // 상태 변경 메서드 호출
+        // User 객체에게 탈퇴 처리 위임 (내부에서 상태 검증 후 변경)
         user.deleteUser();
 
         // Redis에서 Refresh Token 삭제
@@ -257,22 +254,15 @@ public class UserService {
                 .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다."));
 
         User currentUser = getCurrentUser();
-        // 본인 인증 확인
-        if (!user.getId().equals(currentUser.getId())){
-            throw new SecurityException("비밀번호 변경 권한이 없습니다.");
-        }
-
-        // 현재 비밀번호 확인
-        if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
-            throw new IllegalArgumentException("현재 비밀번호가 일치하지 않습니다.");
-        }
+        
+        // User 객체에게 검증 위임
+        user.validateSelf(currentUser);
+        user.validatePassword(request.getCurrentPassword(), passwordEncoder);
 
         // 새 비밀번호 정책 검증 (예: 8자 이상, 숫자/특수문자 포함)
         if (!isValidPassword(request.getNewPassword())) {
             throw new IllegalArgumentException("비밀번호가 보안 정책을 충족하지 않습니다.");
         }
-
-
 
         // 비밀번호 변경
         user.changePassword(request.getNewPassword(),passwordEncoder);
@@ -294,13 +284,9 @@ public class UserService {
 
         User user = getCurrentUser();
 
-        // 기존 상태와 변경하려는 상태가 같으면 업데이트 불필요
-        if (user.getIdVisibility() == newStatus) {
-            throw new IllegalStateException("현재 계정 범위와 동일한 상태로 변경할 수 없습니다.");
-        }
-    //   상태 변경 메서드 호출
+        // User 객체에게 상태 변경 위임 (내부에서 검증 후 변경)
         user.changeStatus(newStatus);
-    //   상태 변경 저장
+        
         userRepository.save(user);
     }
 
@@ -313,6 +299,8 @@ public class UserService {
     private Specification<User> byNickNameContains(String nickName) {
         return (root, query, criteriaBuilder) -> {
             if (StringUtils.hasText(nickName)) {
+                // 참고: LOWER 함수 사용은 DB에 따라 인덱스를 타지 못해 성능 저하를 유발할 수 있음.
+                // 대용량 데이터 처리 시 DB에 함수 기반 인덱스(Function-based Index) 생성을 고려해야 함.
                 return criteriaBuilder.like(
                         criteriaBuilder.lower(root.get("nickName")),
                         "%" + nickName.toLowerCase() + "%"
@@ -361,12 +349,11 @@ public class UserService {
 
     private User checkAdminPrivilegeAndGetTargetUser(Long targetUserId) {
         User adminUser = getCurrentUser();
-        if (adminUser.getAdminYn() != AdminYn.ADMIN) {
-            throw new AccessDeniedException("관리자 권한이 없습니다.");
-        }
-        if (adminUser.getId().equals(targetUserId)) {
-            throw new AccessDeniedException("자신의 계정에 대한 권한을 변경할 수 없습니다.");
-        }
+        
+        // User 객체에게 검증 위임
+        adminUser.validateAdminPrivilege();
+        adminUser.validateNotSelf(User.builder().id(targetUserId).build()); // ID만 가진 임시 객체로 비교
+
         User targetUser = userRepository.findById(targetUserId)
                 .orElseThrow(() -> new EntityNotFoundException("대상 사용자를 찾을 수 없습니다."));
         if (targetUser.getDelYn() == YN.Y) {
@@ -379,12 +366,14 @@ public class UserService {
     @Transactional
     public void grantAdminRole(Long userid) {
         User receiveUser = checkAdminPrivilegeAndGetTargetUser(userid);
+        // User 객체에게 권한 변경 위임
         receiveUser.changeAdmin(AdminYn.ADMIN);
     }
 //   15. 관리자 권한 회수 메소드
     @Transactional
     public void revokeAdminRole(Long userid) {
         User receiveUser = checkAdminPrivilegeAndGetTargetUser(userid);
+        // User 객체에게 권한 변경 위임
         receiveUser.changeAdmin(AdminYn.USER);
     }
 

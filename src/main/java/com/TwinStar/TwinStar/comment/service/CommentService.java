@@ -11,6 +11,8 @@ import com.TwinStar.TwinStar.post.repository.PostRepository;
 import com.TwinStar.TwinStar.user.domain.User;
 import com.TwinStar.TwinStar.user.repository.UserRepository;
 import jakarta.persistence.EntityNotFoundException;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -32,9 +34,18 @@ public class CommentService {
         this.alarmService = alarmService;
     }
 
-    public Long create(CommentCreateReqDto dto) {
+    private User getCurrentUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        User user = userRepository.findById(Long.valueOf(authentication.getName())).orElseThrow(()-> new EntityNotFoundException("user is not found."));
+        if (authentication == null || authentication.getName() == null || "anonymousUser".equals(authentication.getName())) {
+            throw new AuthenticationCredentialsNotFoundException("인증 정보가 존재하지 않습니다.");
+        }
+        Long userId = Long.valueOf(authentication.getName());
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new EntityNotFoundException("User not found with id: " + userId));
+    }
+
+    public Long create(CommentCreateReqDto dto) {
+        User user = getCurrentUser();
         Post post = postRepository.findById(dto.getPostId()).orElseThrow(()-> new EntityNotFoundException("post is not found."));
         Comment comment = Comment.builder()
                 .user(user)
@@ -53,12 +64,12 @@ public class CommentService {
     }
 
     public Long update(CommentUpdateReqDto dto) {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        User loginUser = userRepository.findById(Long.valueOf(authentication.getName())).orElseThrow(()->new EntityNotFoundException("user not found"));
+        User loginUser = getCurrentUser();
         Comment comment = commentRepository.findById(dto.getCommentId()).orElseThrow(()-> new EntityNotFoundException("comment is not found."));
-        User commentWriteUser = comment.getUser();
-
-        if (!loginUser.equals(commentWriteUser)){ return 0L; }
+        
+        // 권한 검증 위임
+        comment.validateOwner(loginUser);
+        
         comment.updateContent(dto.getContent());
         commentRepository.save(comment);
 
@@ -66,12 +77,12 @@ public class CommentService {
     }
 
     public Long delete(Long commentId) {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        User loginUser = userRepository.findById(Long.valueOf(authentication.getName())).orElseThrow(()->new EntityNotFoundException("user not found"));
+        User loginUser = getCurrentUser();
         Comment comment = commentRepository.findById(commentId).orElseThrow(()-> new EntityNotFoundException("comment is not found."));
-        User commentWriteUser = comment.getUser();
-
-        if (!loginUser.equals(commentWriteUser)){ return 0L; }
+        
+        // 권한 검증 위임
+        comment.validateOwner(loginUser);
+        
         comment.delete();
         commentRepository.save(comment);
 
@@ -79,8 +90,7 @@ public class CommentService {
     }
 
     public Long replyCreate(ReplyCommentCreateReqDto dto) {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        User user = userRepository.findById(Long.valueOf(authentication.getName())).orElseThrow(()->new EntityNotFoundException("user not found"));
+        User user = getCurrentUser();
         Comment parent = commentRepository.findById(dto.getParentId()).orElseThrow(()-> new EntityNotFoundException("comment is not found."));
         Post post = commentRepository.findPostByParentId(parent.getId());
 
@@ -98,11 +108,13 @@ public class CommentService {
 
 
     public void pinned(Long commentId) {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        User user = userRepository.findById(Long.valueOf(authentication.getName())).orElseThrow(()->new EntityNotFoundException("user is not found"));
+        User user = getCurrentUser();
         Comment comment = commentRepository.findById(commentId).orElseThrow(()->new EntityNotFoundException("comment is not found"));
-        User postWriter = comment.getPost().getUser();
-        if(!postWriter.equals(user)){ return; }
+        
+        // 게시물 작성자만 고정 가능
+        if(!comment.getPost().getUser().getId().equals(user.getId())){ 
+            throw new AccessDeniedException("게시물 작성자만 댓글을 고정할 수 있습니다.");
+        }
 
 //        대댓글이 아니라면
         if(comment.getParent() == null){

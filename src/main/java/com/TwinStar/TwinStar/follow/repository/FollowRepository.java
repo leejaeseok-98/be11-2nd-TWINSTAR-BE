@@ -12,6 +12,7 @@ import org.springframework.data.jpa.repository.Query;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 public interface FollowRepository extends JpaRepository<Follow, Long> {
     //    특정 Follower와 Following 간의 관계를 조회하는 메서드 *toggleFollow에서 사용
@@ -38,6 +39,10 @@ public interface FollowRepository extends JpaRepository<Follow, Long> {
     // 내가 팔로우한 유저 ID 조회
     @Query("SELECT f.receiveUser.id FROM Follow f WHERE f.user.id = :userId AND f.followYn = 'Y'")
     List<Long> findFollowingUserIds(@Param("userId") Long userId);
+
+    // 특정 유저 목록 중 내가 팔로우한 유저 ID 조회 (N+1 해결용)
+    @Query("SELECT f.receiveUser.id FROM Follow f WHERE f.user.id = :userId AND f.receiveUser.id IN :targetUserIds AND f.followYn = 'Y'")
+    Set<Long> findFollowingUserIdsIn(@Param("userId") Long userId, @Param("targetUserIds") List<Long> targetUserIds);
 
 //    // 나와 맞팔로우 관계인 유저 ID 조회
 //    @Query("""

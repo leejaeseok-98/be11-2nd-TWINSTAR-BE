@@ -19,10 +19,10 @@ import com.TwinStar.TwinStar.post.repository.PostRepository;
 import com.TwinStar.TwinStar.user.domain.User;
 import com.TwinStar.TwinStar.user.dto.UserListResDto;
 import com.TwinStar.TwinStar.user.repository.UserRepository;
-import com.TwinStar.TwinStar.user.service.UserService;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.*;
+import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -49,7 +49,6 @@ public class PostService {
     private final CommentRepository commentRepository;
     private final CommentLikeRepository commentLikeRepository;
     private final PostLikeRepository postLikeRepository;
-    private final UserService userService;
 
     private final S3Client s3Client;
     @Value("${cloud.aws.s3.bucket}")
@@ -58,7 +57,7 @@ public class PostService {
     private String region;
 
     public PostService(PostRepository postRepository, UserRepository userRepository, PostFileRepository postFileRepository
-            , HashTagService hashTagService, PostHashTagRepository postHashTagRepository, FollowRepository followRepository, CommentRepository commentRepository, CommentLikeRepository commentLikeRepository, PostLikeRepository postLikeRepository, UserService userService, S3Client s3Client) {
+            , HashTagService hashTagService, PostHashTagRepository postHashTagRepository, FollowRepository followRepository, CommentRepository commentRepository, CommentLikeRepository commentLikeRepository, PostLikeRepository postLikeRepository, S3Client s3Client) {
         this.postRepository = postRepository;
         this.userRepository = userRepository;
         this.postFileRepository = postFileRepository;
@@ -68,13 +67,21 @@ public class PostService {
         this.commentRepository = commentRepository;
         this.commentLikeRepository = commentLikeRepository;
         this.postLikeRepository = postLikeRepository;
-        this.userService = userService;
         this.s3Client = s3Client;
     }
 
-    public Long save(PostCreateReqDto dto) {
+    private User getCurrentUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        User user = userRepository.findById(Long.valueOf(authentication.getName())).orElseThrow(()-> new EntityNotFoundException("user is not found."));
+        if (authentication == null || authentication.getName() == null || "anonymousUser".equals(authentication.getName())) {
+            throw new AuthenticationCredentialsNotFoundException("인증 정보가 존재하지 않습니다.");
+        }
+        Long userId = Long.valueOf(authentication.getName());
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new EntityNotFoundException("User not found with id: " + userId));
+    }
+
+    public Long save(PostCreateReqDto dto) {
+        User user = getCurrentUser();
         Post post = postRepository.save(dto.toEntity(user));
         for (MultipartFile file : dto.getImageFile()){
             String fileUrl = uploadImage(file);
@@ -111,22 +118,22 @@ public class PostService {
     }
 
     public void delete(Long postId) {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        User loginUser = userRepository.findById(Long.valueOf(authentication.getName())).orElseThrow(()->new EntityNotFoundException("user not found"));
+        User loginUser = getCurrentUser();
         Post post = postRepository.findById(postId).orElseThrow(()-> new EntityNotFoundException("post is not found."));
-        User postWriteUser = post.getUser();
-
-        if (!loginUser.equals(postWriteUser)){ return ; }
+        
+        // 권한 검증 위임
+        post.validateOwner(loginUser);
+        
         postRepository.delete(post);
     }
 
     public void Update(Long postId, PostUpdateReqDto dto) {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        User loginUser = userRepository.findById(Long.valueOf(authentication.getName())).orElseThrow(()->new EntityNotFoundException("user not found"));
+        User loginUser = getCurrentUser();
         Post post = postRepository.findById(postId).orElseThrow(()-> new EntityNotFoundException("post is not found."));
-        User postWriteUser = post.getUser();
-
-        if (!loginUser.equals(postWriteUser)){ return ; }
+        
+        // 권한 검증 위임
+        post.validateOwner(loginUser);
+        
         post.updateContent(dto.getContent());
 
         hashTagService.removeAllHashtagsFromPost(post);
@@ -142,11 +149,12 @@ public class PostService {
     }
 
     public PostUpdateResDto getUpdateDataRes(Long postId) {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        User loginUser = userRepository.findById(Long.valueOf(authentication.getName())).orElseThrow(()->new EntityNotFoundException("user not found"));
+        User loginUser = getCurrentUser();
         Post post = postRepository.findById(postId).orElseThrow(()-> new EntityNotFoundException("post is not found."));
-        User postWriteUser = post.getUser();
-        if (!loginUser.equals(postWriteUser)){ return new PostUpdateResDto(); }
+        
+        // 권한 검증 위임
+        post.validateOwner(loginUser);
+        
         List<String> postUrlList = post.getFileUrls();
         List<String> postHashTagList = hashTagService.getHashTagsByPost(post);
         return post.formEntity(postHashTagList, postUrlList);
@@ -155,33 +163,53 @@ public class PostService {
 
     @Transactional(readOnly = true)
     public Page<PostListResDto> getList(int page, int size) {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        User loginUser = userRepository.findById(Long.valueOf(authentication.getName()))
-                .orElseThrow(() -> new EntityNotFoundException("User not found"));
+        User loginUser = getCurrentUser();
 
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdTime")); // 최신순 정렬
 
-        return postRepository.findFeedPostsForUser(loginUser.getId(), pageable)
-                .map(post -> {
-                    Long likeCount = postRepository.countPostLikes(post.getId());
-                    Long commentCount = postRepository.countPostComments(post.getId());
-                    String isFollow = followRepository.existsByUserAndReceiveUserAndFollowYn(loginUser,post.getUser(), YN.Y)||loginUser.equals(post.getUser()) ? "Y" : "N";
+        Page<Post> postPage = postRepository.findFeedPostsForUser(loginUser.getId(), pageable);
+        
+        if (postPage.isEmpty()) {
+            return Page.empty(pageable);
+        }
 
-                    List<String> hashTags = post.getHashTag().stream()
-                            .map(postHashTag -> postHashTag.getHashTag().getHashTagName())
-                            .collect(Collectors.toList());
+        List<Long> postIds = postPage.getContent().stream().map(Post::getId).collect(Collectors.toList());
+        List<Long> authorIds = postPage.getContent().stream().map(post -> post.getUser().getId()).collect(Collectors.toList());
 
-                    boolean isLiked = postLikeRepository.existsByPostIdAndUserId(post.getId(), loginUser.getId());
-                    String isLike = isLiked ? "Y" : "N";
+        // 좋아요 수, 댓글 수 일괄 조회 (N+1 해결)
+        Map<Long, Long> likeCounts = postLikeRepository.countByPostIds(postIds).stream()
+                .collect(Collectors.toMap(o -> (Long) o[0], o -> (Long) o[1]));
+        
+        Map<Long, Long> commentCounts = commentRepository.countByPostIds(postIds).stream()
+                .collect(Collectors.toMap(o -> (Long) o[0], o -> (Long) o[1]));
 
-                    return PostListResDto.fromEntity(post, likeCount, commentCount, hashTags, isLike,isFollow);
-                });
+        // 로그인한 유저가 좋아요한 게시물 ID 목록 조회 (N+1 해결)
+        Set<Long> likedPostIds = postLikeRepository.findLikedPostIdsByUserId(loginUser.getId(), postIds);
+
+        // 로그인한 유저가 팔로우한 작성자 ID 목록 조회 (N+1 해결)
+        Set<Long> followingAuthorIds = followRepository.findFollowingUserIdsIn(loginUser.getId(), authorIds);
+
+        return postPage.map(post -> {
+            Long likeCount = likeCounts.getOrDefault(post.getId(), 0L);
+            Long commentCount = commentCounts.getOrDefault(post.getId(), 0L);
+
+            List<String> hashTags = post.getHashTag().stream()
+                    .map(postHashTag -> postHashTag.getHashTag().getHashTagName())
+                    .collect(Collectors.toList());
+
+            boolean isLiked = likedPostIds.contains(post.getId());
+            String isLike = isLiked ? "Y" : "N";
+
+            boolean isFollowed = followingAuthorIds.contains(post.getUser().getId()) || loginUser.getId().equals(post.getUser().getId());
+            String isFollow = isFollowed ? "Y" : "N";
+
+            return PostListResDto.fromEntity(post, likeCount, commentCount, hashTags, isLike, isFollow);
+        });
     }
 
     @Transactional(readOnly = true)
     public PostDetailResDto getDetail(Long postId) {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        User user = userRepository.findById(Long.valueOf(authentication.getName())).orElseThrow(() -> new EntityNotFoundException("User not found"));
+        User user = getCurrentUser();
 
         // 게시물 조회 (없으면 예외 발생)
         Post post = postRepository.findById(postId)
@@ -192,10 +220,30 @@ public class PostService {
 
         // 댓글 목록 조회
         List<Comment> comments = commentRepository.findByPost(post);
+        
+        // 댓글 ID 목록 추출
+        List<Long> commentIds = comments.stream().map(Comment::getId).collect(Collectors.toList());
+        
+        // 댓글 좋아요 수 일괄 조회 (N+1 해결)
+        Map<Long, Long> commentLikeCounts = new HashMap<>();
+        Set<Long> likedCommentIds = new HashSet<>();
+        
+        if (!commentIds.isEmpty()) {
+            commentLikeCounts = commentLikeRepository.countByCommentIds(commentIds).stream()
+                    .collect(Collectors.toMap(o -> (Long) o[0], o -> (Long) o[1]));
+            
+            // 로그인한 유저가 좋아요한 댓글 ID 목록 조회 (N+1 해결)
+            likedCommentIds = commentLikeRepository.findLikedCommentIdsByUserId(user.getId(), commentIds);
+        }
+
+        // final 변수로 만들어 람다 내부에서 사용 가능하게 함
+        Map<Long, Long> finalCommentLikeCounts = commentLikeCounts;
+        Set<Long> finalLikedCommentIds = likedCommentIds;
+
         List<CommentListResDto> commentList = comments.stream()
                 .map(comment -> {
-                    Long commentLikeCount = commentRepository.countCommentLikes(comment.getId());
-                    boolean isCommentLiked = commentLikeRepository.existsByCommentIdAndUserId(comment.getId(), user.getId());
+                    Long commentLikeCount = finalCommentLikeCounts.getOrDefault(comment.getId(), 0L);
+                    boolean isCommentLiked = finalLikedCommentIds.contains(comment.getId());
                     String isCommentLike = isCommentLiked ? "Y" : "N";
                     return CommentListResDto.fromEntity(comment, commentLikeCount, isCommentLike);
                 })
@@ -218,10 +266,7 @@ public class PostService {
 
     @Transactional(readOnly = true)
     public Page<UserListResDto> getLikeList(Long postId, Pageable pageable) {
-        // 현재 로그인한 사용자 정보 가져오기
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        User loginUser = userRepository.findById(Long.valueOf(authentication.getName()))
-                .orElseThrow(() -> new EntityNotFoundException("User not found"));
+        User loginUser = getCurrentUser();
 
         // 해당 게시물을 좋아요 한 유저 목록 조회 (페이징)
         Page<User> likedUsers = postLikeRepository.findUsersWhoLikedPost(postId, pageable);
@@ -232,26 +277,5 @@ public class PostService {
 
             return new UserListResDto().toUserListResDto(user, isFollow);
         });
-    }
-
-    public Page<PostListResDto> getHashtagPostList(String hashtag,Integer page, Integer size) {
-        User loginUser = userService.getCurrentUser();
-        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdTime")); // 최신순 정렬
-
-        return postRepository.findVisiblePostsByHashtags(hashtag,loginUser.getId(), pageable)
-                .map(post -> {
-                    Long likeCount = postRepository.countPostLikes(post.getId());
-                    Long commentCount = postRepository.countPostComments(post.getId());
-                    String isFollow = followRepository.existsByUserAndReceiveUserAndFollowYn(loginUser,post.getUser(), YN.Y)||loginUser.equals(post.getUser()) ? "Y" : "N";
-
-                    List<String> hashTags = post.getHashTag().stream()
-                            .map(postHashTag -> postHashTag.getHashTag().getHashTagName())
-                            .collect(Collectors.toList());
-
-                    boolean isLiked = postLikeRepository.existsByPostIdAndUserId(post.getId(), loginUser.getId());
-                    String isLike = isLiked ? "Y" : "N";
-
-                    return PostListResDto.fromEntity(post, likeCount, commentCount, hashTags, isLike,isFollow);
-                });
     }
 }

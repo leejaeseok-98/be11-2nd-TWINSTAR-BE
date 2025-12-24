@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 @Repository
 
@@ -26,6 +27,10 @@ public interface PostLikeRepository extends JpaRepository<PostLike,Long> {
     Optional<PostLike> findByPostAndUser(Post post, User user);
 
     boolean existsByPostIdAndUserId(Long postId, Long userId);
+
+    // 특정 유저가 좋아요한 게시물 ID 목록 조회 (N+1 해결용)
+    @Query("SELECT pl.post.id FROM PostLike pl WHERE pl.user.id = :userId AND pl.post.id IN :postIds")
+    Set<Long> findLikedPostIdsByUserId(@Param("userId") Long userId, @Param("postIds") List<Long> postIds);
 
     @Query("SELECT pl.user FROM PostLike pl WHERE pl.post.id = :postId")
     Page<User> findUsersWhoLikedPost(@Param("postId") Long postId, Pageable pageable);

@@ -3,7 +3,6 @@ package com.TwinStar.TwinStar.comment.service;
 import com.TwinStar.TwinStar.alarm.repository.AlarmRepository;
 import com.TwinStar.TwinStar.alarm.service.AlarmService;
 import com.TwinStar.TwinStar.comment.domain.Comment;
-import com.TwinStar.TwinStar.comment.domain.CommentLike;
 import com.TwinStar.TwinStar.comment.dto.CommentLikeResDto;
 import com.TwinStar.TwinStar.comment.repository.CommentLikeRepository;
 import com.TwinStar.TwinStar.comment.repository.CommentRepository;
@@ -13,7 +12,6 @@ import com.TwinStar.TwinStar.user.domain.User;
 import com.TwinStar.TwinStar.user.dto.UserListResDto;
 import com.TwinStar.TwinStar.user.repository.UserRepository;
 import jakarta.persistence.EntityNotFoundException;
-import lombok.RequiredArgsConstructor;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.domain.Page;
@@ -26,7 +24,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 
-import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 import static com.TwinStar.TwinStar.common.config.RabbitMQConfig.BACKUP_QUEUE_COMMENT_AL;
@@ -77,35 +74,29 @@ public class CommentLikeService {
             commentLikeRedisTemplate.opsForValue().set(redisKey, likeCount, 10, TimeUnit.MINUTES);
         }
 
-        Optional<CommentLike> commentLikeOpt = commentLikeRepository.findByCommentAndUser(comment, user);
-        boolean isLike;
+        // Comment 엔티티에게 좋아요 토글 위임
+        boolean isLiked = comment.toggleLike(user);
 
-        if (commentLikeOpt.isPresent()) {
-            commentLikeRepository.delete(commentLikeOpt.get());
-            isLike = false;
-            rabbitTemplate.convertAndSend(BACKUP_QUEUE_COMMENT_ML, commentId);
-            likeCount--;
-        } else {
-            CommentLike newLike = CommentLike.builder()
-                    .comment(comment)
-                    .user(user)
-                    .build();
-            commentLikeRepository.save(newLike);
-            isLike = true;
+        if (isLiked) {
+            // 좋아요 추가됨
             rabbitTemplate.convertAndSend(BACKUP_QUEUE_COMMENT_AL, commentId);
             likeCount++;
+
+            User receiver = comment.getUser();
+            String content = receiver.getNickName() + "님이 회원님의 댓글을 좋아합니다.";
+            String url = "https://www.alexandrelax.store/post/detail/" + comment.getPost().getId();
+            if(!alarmRepository.existsByUrlAndContent(url,content)){
+                alarmService.createAlarm(receiver, content, url);
+            }
+        } else {
+            // 좋아요 취소됨
+            rabbitTemplate.convertAndSend(BACKUP_QUEUE_COMMENT_ML, commentId);
+            likeCount--;
         }
 
         commentLikeRedisTemplate.opsForValue().set(redisKey, likeCount, 10, TimeUnit.MINUTES);
 
-        User receiver = comment.getUser();
-        String content = receiver.getNickName() + "님이 회원님의 댓글을 좋아합니다.";
-        String url = "https://www.alexandrelax.store/post/detail/" + comment.getPost().getId();
-        if(!alarmRepository.existsByUrlAndContent(url,content)){
-            alarmService.createAlarm(receiver, content, url);
-        }
-
-        return new CommentLikeResDto(likeCount, isLike);
+        return new CommentLikeResDto(likeCount, isLiked);
     }
 
     @Transactional(readOnly = true)

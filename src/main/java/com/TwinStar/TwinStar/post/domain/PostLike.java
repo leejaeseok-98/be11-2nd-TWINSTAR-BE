@@ -26,5 +26,8 @@ public class PostLike {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-
+    // 연관관계 편의 메서드
+    public void setPost(Post post) {
+        this.post = post;
+    }
 }

@@ -12,9 +12,11 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.springframework.security.access.AccessDeniedException;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Entity
@@ -41,8 +43,8 @@ public class Post extends BaseTimeEntity {
 
     private Long score;
 
-    @OneToMany(mappedBy = "post", cascade = CascadeType.REMOVE, orphanRemoval = true)
-    private List<PostLike> PostLike = new ArrayList<>();
+    @OneToMany(mappedBy = "post", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<PostLike> postLikes = new ArrayList<>();
 
     @OneToMany(mappedBy = "post", cascade = CascadeType.REMOVE, orphanRemoval = true)
     private List<PostFile> postFile = new ArrayList<>();
@@ -70,5 +72,32 @@ public class Post extends BaseTimeEntity {
         return postFile.stream()
                 .map(PostFile::getFileUrl)
                 .collect(Collectors.toList());
+    }
+
+    // 작성자 권한 검증
+    public void validateOwner(User user) {
+        if (!this.user.getId().equals(user.getId())) {
+            throw new AccessDeniedException("해당 게시물에 대한 권한이 없습니다.");
+        }
+    }
+
+    // 좋아요 토글 (추가/삭제) 및 결과 반환 (true: 추가됨, false: 삭제됨)
+    public boolean toggleLike(User user) {
+        Optional<PostLike> existingLike = this.postLikes.stream()
+                .filter(like -> like.getUser().getId().equals(user.getId()))
+                .findFirst();
+
+        if (existingLike.isPresent()) {
+            this.postLikes.remove(existingLike.get());
+            existingLike.get().setPost(null); // 양방향 관계 해제
+            return false; // 좋아요 취소됨
+        } else {
+            PostLike newLike = PostLike.builder()
+                    .post(this)
+                    .user(user)
+                    .build();
+            this.postLikes.add(newLike);
+            return true; // 좋아요 추가됨
+        }
     }
 }

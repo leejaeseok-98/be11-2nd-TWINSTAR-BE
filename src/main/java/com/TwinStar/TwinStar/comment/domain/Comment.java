@@ -8,9 +8,11 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.springframework.security.access.AccessDeniedException;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 @Entity
 @AllArgsConstructor
@@ -41,7 +43,7 @@ public class Comment extends BaseTimeEntity {
     @Builder.Default
     private List<Comment> child = new ArrayList<>();
 
-    @OneToMany(mappedBy = "comment" , cascade = CascadeType.ALL)
+    @OneToMany(mappedBy = "comment" , cascade = CascadeType.ALL, orphanRemoval = true)
     private List<CommentLike> commentLike = new ArrayList<>();
 
     @Builder.Default
@@ -65,5 +67,32 @@ public class Comment extends BaseTimeEntity {
 
     public void pinned(){
         this.pinnedComment = "Y";
+    }
+
+    // 작성자 권한 검증
+    public void validateOwner(User user) {
+        if (!this.user.getId().equals(user.getId())) {
+            throw new AccessDeniedException("해당 댓글에 대한 권한이 없습니다.");
+        }
+    }
+
+    // 좋아요 토글 (추가/삭제) 및 결과 반환 (true: 추가됨, false: 삭제됨)
+    public boolean toggleLike(User user) {
+        Optional<CommentLike> existingLike = this.commentLike.stream()
+                .filter(like -> like.getUser().getId().equals(user.getId()))
+                .findFirst();
+
+        if (existingLike.isPresent()) {
+            this.commentLike.remove(existingLike.get());
+            existingLike.get().setComment(null); // 양방향 관계 해제
+            return false; // 좋아요 취소됨
+        } else {
+            CommentLike newLike = CommentLike.builder()
+                    .comment(this)
+                    .user(user)
+                    .build();
+            this.commentLike.add(newLike);
+            return true; // 좋아요 추가됨
+        }
     }
 }

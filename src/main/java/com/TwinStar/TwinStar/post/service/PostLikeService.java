@@ -3,7 +3,6 @@ package com.TwinStar.TwinStar.post.service;
 import com.TwinStar.TwinStar.alarm.repository.AlarmRepository;
 import com.TwinStar.TwinStar.alarm.service.AlarmService;
 import com.TwinStar.TwinStar.post.domain.Post;
-import com.TwinStar.TwinStar.post.domain.PostLike;
 import com.TwinStar.TwinStar.post.dto.PostLikeResDto;
 import com.TwinStar.TwinStar.post.repository.PostLikeRepository;
 import com.TwinStar.TwinStar.post.repository.PostRepository;
@@ -18,7 +17,6 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 import static com.TwinStar.TwinStar.common.config.RabbitMQConfig.BACKUP_QUEUE_AL;
@@ -66,35 +64,29 @@ public class PostLikeService {
             postLikeRedisTemplate.opsForValue().set(redisKey, likeCount, 10, TimeUnit.MINUTES);
         }
 
-        Optional<PostLike> postLikeOpt = postLikeRepository.findByPostAndUser(post, user);
-        boolean isLike;
+        // Post 엔티티에게 좋아요 토글 위임
+        boolean isLiked = post.toggleLike(user);
 
-        if (postLikeOpt.isPresent()) {
-            postLikeRepository.delete(postLikeOpt.get());
-            isLike = false;
-            rabbitTemplate.convertAndSend(BACKUP_QUEUE_ML, postId);
-            likeCount--;
-        } else {
-            PostLike newLike = PostLike.builder()
-                    .post(post)
-                    .user(user)
-                    .build();
-            postLikeRepository.save(newLike);
-            isLike = true;
+        if (isLiked) {
+            // 좋아요 추가됨
             rabbitTemplate.convertAndSend(BACKUP_QUEUE_AL, postId);
             likeCount++;
+
+            // 게시글 좋아요 알림
+            User receiver = post.getUser();
+            String content = receiver.getNickName() + "님이 회원님의 게시물을 좋아합니다.";
+            String url = "https://www.alexandrelax.store/post/detail/" + post.getId();
+            if (!alarmRepository.existsByUrlAndContent(url, content)) {
+                alarmService.createAlarm(receiver, content, url);
+            }
+        } else {
+            // 좋아요 취소됨
+            rabbitTemplate.convertAndSend(BACKUP_QUEUE_ML, postId);
+            likeCount--;
         }
 
         postLikeRedisTemplate.opsForValue().set(redisKey, likeCount, 10, TimeUnit.MINUTES);
 
-        // 게시글 좋아요 알림
-        User receiver = post.getUser();
-        String content = receiver.getNickName() + "님이 회원님의 게시물을 좋아합니다.";
-        String url = "https://www.alexandrelax.store/post/detail/" + post.getId();
-        if (!alarmRepository.existsByUrlAndContent(url, content)) {
-            alarmService.createAlarm(receiver, content, url);
-        }
-
-        return new PostLikeResDto(likeCount, isLike);
+        return new PostLikeResDto(likeCount, isLiked);
     }
 }

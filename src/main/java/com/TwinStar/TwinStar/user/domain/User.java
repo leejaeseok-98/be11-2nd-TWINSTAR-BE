@@ -3,6 +3,7 @@ package com.TwinStar.TwinStar.user.domain;
 import com.TwinStar.TwinStar.common.domain.BaseTimeEntity;
 import com.TwinStar.TwinStar.common.domain.Visibility;
 import com.TwinStar.TwinStar.common.domain.YN;
+import com.TwinStar.TwinStar.common.exception.LoginFailedException;
 import com.TwinStar.TwinStar.post.domain.Post;
 import com.TwinStar.TwinStar.user.dto.ChatUserListDto;
 import com.TwinStar.TwinStar.user.dto.UserListDto;
@@ -12,6 +13,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -93,6 +95,9 @@ public class User extends BaseTimeEntity {
 
     //소프트 딜리트메서드 추가
     public void deleteUser() {
+        if (this.delYn == YN.Y) {
+            throw new IllegalStateException("이미 탈퇴 처리된 사용자입니다.");
+        }
         this.delYn = YN.valueOf("Y");
     }
 
@@ -112,6 +117,9 @@ public class User extends BaseTimeEntity {
 
     // 관리자 권한 변경 메서드
     public void changeAdmin(AdminYn newRole){
+        if (this.delYn == YN.Y) {
+            throw new IllegalStateException("삭제된 계정의 권한을 변경할 수 없습니다.");
+        }
         this.adminYn = newRole;
     }
 
@@ -131,6 +139,46 @@ public class User extends BaseTimeEntity {
     public boolean isBanned() {
         // 무기한 정지이거나, banCloseTime이 현재 시간보다 이후면 로그인 차단
         return this.userStatus == UserStatus.BAN && (banCloseTime == null || banCloseTime.isAfter(LocalDateTime.now()));
+    }
+
+    // --- 객체지향적 리팩토링: 스스로 판단하는 메서드 추가 ---
+
+    // 로그인 가능 여부 검증
+    public void validateLogin() {
+        if (this.delYn == YN.Y) {
+            throw new LoginFailedException("탈퇴한 계정입니다.");
+        }
+        if (this.userStatus == UserStatus.BAN) {
+            throw new LoginFailedException("정지된 계정입니다.");
+        }
+    }
+
+    // 비밀번호 일치 여부 검증
+    public void validatePassword(String rawPassword, PasswordEncoder passwordEncoder) {
+        if (!passwordEncoder.matches(rawPassword, this.password)) {
+            throw new LoginFailedException("email 또는 비밀번호가 일치하지 않습니다.");
+        }
+    }
+
+    // 관리자 권한 검증
+    public void validateAdminPrivilege() {
+        if (this.adminYn != AdminYn.ADMIN) {
+            throw new AccessDeniedException("관리자 권한이 없습니다.");
+        }
+    }
+
+    // 자기 자신에 대한 행동인지 검증 (예: 관리자가 자기 권한 변경 불가)
+    public void validateNotSelf(User targetUser) {
+        if (this.id.equals(targetUser.getId())) {
+            throw new AccessDeniedException("자신의 계정에 대한 권한을 변경할 수 없습니다.");
+        }
+    }
+    
+    // 본인 확인 검증
+    public void validateSelf(User targetUser) {
+        if (!this.id.equals(targetUser.getId())) {
+            throw new SecurityException("권한이 없습니다.");
+        }
     }
 
 }
