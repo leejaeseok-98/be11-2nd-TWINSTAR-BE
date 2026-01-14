@@ -141,7 +141,6 @@ public class User extends BaseTimeEntity {
         return this.userStatus == UserStatus.BAN && (banCloseTime == null || banCloseTime.isAfter(LocalDateTime.now()));
     }
 
-    // --- 객체지향적 리팩토링: 스스로 판단하는 메서드 추가 ---
 
     // 로그인 가능 여부 검증
     public void validateLogin() {

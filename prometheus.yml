@@ -1,9 +1,22 @@
 global:
   scrape_interval: 15s
+  evaluation_interval: 15s
 
 scrape_configs:
-  - job_name: "spring-boot"
-    metrics_path: "/actuator/prometheus"
+  # Spring Boot 애플리케이션
+  - job_name: 'spring-app'
+    metrics_path: '/actuator/prometheus'
     static_configs:
-      # host.docker.internal은 도커 컨테이너 안에서 내 컴퓨터(Localhost)를 찾는 주소입니다.
-      - targets: ["host.docker.internal:8080"]
+      - targets: ['app:8080']
+        labels:
+          application: 'sns-platform'
+
+  # Prometheus 자체
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # RabbitMQ (옵션)
+  - job_name: 'rabbitmq'
+    static_configs:
+      - targets: ['rabbitmq:15692']
