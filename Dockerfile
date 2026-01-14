@@ -16,12 +16,12 @@ RUN gradle clean bootJar -x test --no-daemon
 # ============================================
 # 2. Runtime Stage
 # ============================================
-FROM openjdk:17-jdk-slim
+FROM eclipse-temurin:17-jdk-jammy
 WORKDIR /app
 
 # 한국 시간대 설정
 RUN apt-get update && \
-    apt-get install -y tzdata && \
+    apt-get install -y tzdata curl && \
     ln -sf /usr/share/zoneinfo/Asia/Seoul /etc/localtime && \
     echo "Asia/Seoul" > /etc/timezone && \
     apt-get clean && \

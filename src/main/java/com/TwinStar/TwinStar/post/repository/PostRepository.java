@@ -52,20 +52,9 @@ public interface PostRepository extends JpaRepository<Post,Long> {
     JOIN pht.hashTag h
     WHERE 
         h.hashTagName = :hashtag
-        
-        AND (
-            p.user.id = :currentUserId
-
-            OR p.user.idVisibility = 'ALL'
-            
-            OR (p.user.idVisibility = 'FOLLOW' AND p.user.id IN (
-                SELECT f.receiveUser.id FROM Follow f WHERE f.user.id = :currentUserId AND f.followYn = 'Y'
-            ))
-        )
 """)
-    Page<Post> findVisiblePostsByHashtags(
+    Page<Post> findByHashTag(
             @Param("hashtag") String hashtag,
-            @Param("currentUserId") Long currentUserId,
             Pageable pageable
     );
 

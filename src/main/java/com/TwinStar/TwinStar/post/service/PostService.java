@@ -20,6 +20,7 @@ import com.TwinStar.TwinStar.user.domain.User;
 import com.TwinStar.TwinStar.user.dto.UserListResDto;
 import com.TwinStar.TwinStar.user.repository.UserRepository;
 import jakarta.persistence.EntityNotFoundException;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.*;
 import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
@@ -36,6 +37,7 @@ import java.io.IOException;
 import java.util.*;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @Transactional
 public class PostService {
@@ -180,6 +182,53 @@ public class PostService {
         Map<Long, Long> likeCounts = postLikeRepository.countByPostIds(postIds).stream()
                 .collect(Collectors.toMap(o -> (Long) o[0], o -> (Long) o[1]));
         
+        Map<Long, Long> commentCounts = commentRepository.countByPostIds(postIds).stream()
+                .collect(Collectors.toMap(o -> (Long) o[0], o -> (Long) o[1]));
+
+        // 로그인한 유저가 좋아요한 게시물 ID 목록 조회 (N+1 해결)
+        Set<Long> likedPostIds = postLikeRepository.findLikedPostIdsByUserId(loginUser.getId(), postIds);
+
+        // 로그인한 유저가 팔로우한 작성자 ID 목록 조회 (N+1 해결)
+        Set<Long> followingAuthorIds = followRepository.findFollowingUserIdsIn(loginUser.getId(), authorIds);
+
+        return postPage.map(post -> {
+            Long likeCount = likeCounts.getOrDefault(post.getId(), 0L);
+            Long commentCount = commentCounts.getOrDefault(post.getId(), 0L);
+
+            List<String> hashTags = post.getHashTag().stream()
+                    .map(postHashTag -> postHashTag.getHashTag().getHashTagName())
+                    .collect(Collectors.toList());
+
+            boolean isLiked = likedPostIds.contains(post.getId());
+            String isLike = isLiked ? "Y" : "N";
+
+            boolean isFollowed = followingAuthorIds.contains(post.getUser().getId()) || loginUser.getId().equals(post.getUser().getId());
+            String isFollow = isFollowed ? "Y" : "N";
+
+            return PostListResDto.fromEntity(post, likeCount, commentCount, hashTags, isLike, isFollow);
+        });
+    }
+
+    @Transactional(readOnly = true)
+    public Page<PostListResDto> getHashtagPostList(String hashtag, int page, int size) {
+        User loginUser = getCurrentUser();
+
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdTime")); // 최신순 정렬
+
+        // 해시태그로 게시물 검색 (페이징)
+        Page<Post> postPage = postRepository.findByHashTag(hashtag, pageable);
+
+        if (postPage.isEmpty()) {
+            return Page.empty(pageable);
+        }
+
+        List<Long> postIds = postPage.getContent().stream().map(Post::getId).collect(Collectors.toList());
+        List<Long> authorIds = postPage.getContent().stream().map(post -> post.getUser().getId()).collect(Collectors.toList());
+
+        // 좋아요 수, 댓글 수 일괄 조회 (N+1 해결)
+        Map<Long, Long> likeCounts = postLikeRepository.countByPostIds(postIds).stream()
+                .collect(Collectors.toMap(o -> (Long) o[0], o -> (Long) o[1]));
+
         Map<Long, Long> commentCounts = commentRepository.countByPostIds(postIds).stream()
                 .collect(Collectors.toMap(o -> (Long) o[0], o -> (Long) o[1]));
 

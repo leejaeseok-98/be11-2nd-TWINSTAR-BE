@@ -1,11 +1,13 @@
 package com.TwinStar.TwinStar.aop;
 
+import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StopWatch;
 
+@Slf4j
 @Aspect
 @Component
 public class TimeTraceAop {
@@ -23,7 +25,7 @@ public class TimeTraceAop {
             String className = joinPoint.getTarget().getClass().getSimpleName();
             String methodName = joinPoint.getSignature().getName();
 
-            System.out.printf("[AOP] %s.%s | %d ms\n", className, methodName, totalTime);
+            log.info("[AOP] {}.{} | {} ms", className, methodName, totalTime);
         }
     }
 }

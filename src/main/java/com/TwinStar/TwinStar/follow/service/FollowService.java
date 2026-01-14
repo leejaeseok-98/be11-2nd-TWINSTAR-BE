@@ -12,8 +12,10 @@ import com.TwinStar.TwinStar.user.dto.UserListResDto;
 import com.TwinStar.TwinStar.user.repository.UserRepository;
 import com.TwinStar.TwinStar.user.service.UserService;
 import jakarta.persistence.EntityNotFoundException;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -23,6 +25,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @Transactional(readOnly = true)
 public class FollowService {
@@ -40,15 +43,29 @@ public class FollowService {
         this.userService = userService;
     }
 
+    private User getCurrentUser() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || authentication.getName() == null || "anonymousUser".equals(authentication.getName())) {
+            throw new AuthenticationCredentialsNotFoundException("인증 정보가 존재하지 않습니다.");
+        }
+        Long userId = Long.valueOf(authentication.getName());
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new EntityNotFoundException("User not found with id: " + userId));
+    }
+
     //    토글 팔로우/언팔로우 요청
     @Transactional
     public boolean toggleFollow(Long receiveUserId) {
-        Long userId = userService.getCurrentUser().getId();
+        log.info("[FollowService] toggleFollow started - receiveUserId: {}", receiveUserId);
 
-        User followRequest = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("팔로워가 존재하지 않습니다."));
+        User followRequest = getCurrentUser();
+        log.debug("[FollowService] Current user: {} (ID: {})", followRequest.getNickName(), followRequest.getId());
+
         User receiveFollowRequest = userRepository.findById(receiveUserId)
-                .orElseThrow(() -> new IllegalArgumentException("팔로잉 대상이 존재하지 않습니다."));
+                .orElseThrow(() -> {
+                    log.error("[FollowService] Target user not found - receiveUserId: {}", receiveUserId);
+                    return new IllegalArgumentException("팔로잉 대상이 존재하지 않습니다.");
+                });
 
         // 팔로우 상태 확인
         Optional<Follow> existingFollow = followRepository.findByUserAndReceiveUser(followRequest,receiveFollowRequest);
@@ -58,20 +75,27 @@ public class FollowService {
         String url = "http://localhost:8080/profile/"+followRequest.getId();
         if(!alarmRepository.existsByUrlAndContent(url,content)){
             alarmService.createAlarm(receiveFollowRequest,content,url);
+            log.debug("[FollowService] Alarm created for user: {}", receiveFollowRequest.getNickName());
         }
 
+        boolean result;
         if (existingFollow.isPresent()) {
             Follow follow = existingFollow.get();
             follow.toggleFollow();  // followYn 값 변경 (Y <-> N)
             followRepository.save(follow);
-            return follow.getFollowYn() == YN.Y; // true = 팔로우 상태, false = 언팔로우 상태
+            result = follow.getFollowYn() == YN.Y;
+            log.info("[FollowService] Follow status toggled - userId: {}, receiveUserId: {}, isFollowing: {}",
+                    followRequest.getId(), receiveUserId, result);
         } else {
             // 팔로우하고 있지 않다면 새로 팔로우
             Follow follow = new Follow(followRequest, receiveFollowRequest);
             followRepository.save(follow);
-            return true; // 팔로우했으므로 true 반환
+            result = true;
+            log.info("[FollowService] New follow created - userId: {}, receiveUserId: {}",
+                    followRequest.getId(), receiveUserId);
         }
 
+        return result;
     }
 
     // 팔로워 수 조회
@@ -131,7 +155,3 @@ public class FollowService {
         return followRepository.existsByUserAndReceiveUserAndFollowYn(user, targetUser, YN.Y);
     }
 }
-
-
-
-
