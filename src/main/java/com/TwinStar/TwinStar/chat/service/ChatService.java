@@ -15,6 +15,7 @@ import com.TwinStar.TwinStar.user.domain.User;
 import com.TwinStar.TwinStar.user.dto.ChatUserListDto;
 import com.TwinStar.TwinStar.user.repository.UserRepository;
 import jakarta.persistence.EntityNotFoundException;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.Authentication;
@@ -25,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Optional;
 
+@Slf4j
 @Service
 @Transactional
 public class ChatService {
@@ -44,6 +46,7 @@ public class ChatService {
 
     //    채팅 방 개설
     public Long RoomOpen(ChatRoomCreateReqDto dto){
+        log.info("[ChatService] 채팅방 개설 시작");
         dto.getIdList().add(Long.valueOf(SecurityContextHolder.getContext().getAuthentication().getName()));
 
         if (dto.getIdList().size() == 2) {
@@ -53,6 +56,7 @@ public class ChatService {
             // 기존 1:1 채팅방이 있는지 확인
             Optional<ChatRoom> existingRoom = chatRoomRepository.findPrivateChatRoom(userId1, userId2);
             if (existingRoom.isPresent()) {
+                log.info("[ChatService] 기존 1:1 채팅방 존재 - chatRoomId: {}", existingRoom.get().getId());
 //                있다면 나간 사람 있을 수도 있으니 유저다시 활성화
                 List<ChatParticipant> participants = chatParticipantRepository.findAllByChatRoomId(existingRoom.orElse(null).getId());
                 for (ChatParticipant participant : participants) {
@@ -81,6 +85,7 @@ public class ChatService {
             chatParticipantRepository.save(chatParticipant);
         }
 
+        log.info("[ChatService] 채팅방 개설 완료 - chatRoomId: {}, participantCount: {}", chatRoom.getId(), dto.getIdList().size());
         return chatRoom.getId();
     }
 

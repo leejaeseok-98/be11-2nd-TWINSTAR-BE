@@ -5,6 +5,7 @@ import com.TwinStar.TwinStar.post.dto.*;
 import com.TwinStar.TwinStar.post.service.PostLikeService;
 import com.TwinStar.TwinStar.post.service.PostService;
 import com.TwinStar.TwinStar.user.dto.UserListResDto;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
@@ -12,6 +13,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+@Slf4j
 @RequestMapping("/post")
 @RestController
 public class PostController {
@@ -26,13 +28,17 @@ public class PostController {
 
     @PostMapping("/create")
     public ResponseEntity<?> create(@ModelAttribute PostCreateReqDto dto){
+        log.info("[PostController] 게시물 작성 요청");
         Long postId = postService.save(dto);
+        log.info("[PostController] 게시물 작성 완료 - postId: {}", postId);
         return new ResponseEntity<>(new CommonDto(HttpStatus.OK.value(), "게시물 작성 완료",postId),HttpStatus.OK);
     }
 
     @PostMapping("delete/{postId}")
     public ResponseEntity<?> delete(@PathVariable Long postId){
+        log.info("[PostController] 게시물 삭제 요청 - postId: {}", postId);
         postService.delete(postId);
+        log.info("[PostController] 게시물 삭제 완료 - postId: {}", postId);
         return new ResponseEntity<>(new CommonDto(HttpStatus.OK.value(), "게시물 삭제 완료", postId), HttpStatus.OK);
     }
 
@@ -44,7 +50,9 @@ public class PostController {
 
     @PostMapping("/update/{postId}")
     public ResponseEntity<?> patchUpdate(@PathVariable Long postId, @RequestBody PostUpdateReqDto dto) {
+        log.info("[PostController] 게시물 수정 요청 - postId: {}", postId);
         postService.Update(postId, dto); // postId가 있으면 기존 게시물 수정
+        log.info("[PostController] 게시물 수정 완료 - postId: {}", postId);
         return new ResponseEntity<>(new CommonDto(HttpStatus.OK.value(), "게시물 수정 완료", postId), HttpStatus.OK);
     }
 
@@ -71,6 +79,7 @@ public class PostController {
 
     @GetMapping("/detail/{postId}")
     public ResponseEntity<?> getPostDetail(@PathVariable Long postId) {
+        log.debug("[PostController] 게시물 상세 조회 요청 - postId: {}", postId);
         PostDetailResDto postDetailResDto = postService.getDetail(postId);
         return new ResponseEntity<>(new CommonDto(HttpStatus.OK.value(), "게시물 조회 완료", postDetailResDto), HttpStatus.OK);
     }

@@ -10,6 +10,7 @@ import com.TwinStar.TwinStar.user.dto.*;
 import com.TwinStar.TwinStar.user.service.UserService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.Valid;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
@@ -31,6 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
+@Slf4j
 @RestController
 @RequestMapping("/user")
 public class UserController {
@@ -52,8 +54,10 @@ public class UserController {
 //  1.로그인
     @PostMapping("/doLogin")
     public ResponseEntity<LoginResponseDto> doLogin(@RequestBody LoginDto dto) {
+        log.info("[UserController] 로그인 요청 - email: {}", dto.getEmail());
 //        id,email, password 검증
         User user = userService.login(dto);
+        log.info("[UserController] 로그인 성공 - userId: {}", user.getId());
 //        토큰 생성 및 return
         String token = jwtTokenProvider.createToken(user.getId(),user.getEmail(), user.getNickName(),user.getAdminYn().toString());
         String refreshToken = jwtTokenProvider.createRefreshToken(user.getId(),user.getEmail(),user.getAdminYn().toString());
@@ -68,14 +72,18 @@ public class UserController {
 
     @PostMapping("/logout")
     public ResponseEntity<?> logout() {
+        log.info("[UserController] 로그아웃 요청");
         userService.logout();
+        log.info("[UserController] 로그아웃 완료");
         return new ResponseEntity<>(new CommonDto(HttpStatus.OK.value(), "Logged out successfully", null), HttpStatus.OK);
     }
 
 //  2.회원가입
     @PostMapping("/create")
     public ResponseEntity<?> create(@Valid @RequestBody UserSaveReq dto) {
+        log.info("[UserController] 회원가입 요청 - email: {}, nickname: {}", dto.getEmail(), dto.getNickName());
         Long memberId = userService.create(dto);
+        log.info("[UserController] 회원가입 완료 - userId: {}", memberId);
         return new ResponseEntity<>(memberId, HttpStatus.CREATED);
     }
 
@@ -192,7 +200,9 @@ public class UserController {
     @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/admin/grant")
     public ResponseEntity<?> grantAdmin(@RequestBody GrantAdminId grant) { //보안 및 json으로 받기 위해 @RequestBody 씀
+        log.info("[UserController] 관리자 권한 부여 요청 - targetUserId: {}", grant.getId());
         userService.grantAdminRole(grant.getId()); //유저 id로 권한 부여 서비스 메서드 호출
+        log.info("[UserController] 관리자 권한 부여 완료 - targetUserId: {}", grant.getId());
         return new ResponseEntity<>(new CommonDto(HttpStatus.OK.value(), "관리자 권한이 부여되었습니다.",grant),HttpStatus.OK);
     }
 
@@ -200,7 +210,9 @@ public class UserController {
     @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/admin/revoke")
     public ResponseEntity<?> revokeAdmin(@RequestBody GrantAdminId revoke) {
+        log.info("[UserController] 관리자 권한 회수 요청 - targetUserId: {}", revoke.getId());
         userService.revokeAdminRole(revoke.getId());
+        log.info("[UserController] 관리자 권한 회수 완료 - targetUserId: {}", revoke.getId());
         return new ResponseEntity<>(new CommonDto(HttpStatus.OK.value(), "관리자 권한이 해제되었습니다.",revoke),HttpStatus.OK);
     }
 
@@ -215,7 +227,9 @@ public class UserController {
     @PostMapping("/admin/{userId}/ban")
     @PreAuthorize("hasRole('ADMIN')") // 관리자만 접근 가능
     public ResponseEntity<?> suspendUser(@PathVariable Long userId, @RequestParam(required = false) Integer days) {
+        log.info("[UserController] 계정 정지 요청 - targetUserId: {}, days: {}", userId, days);
         userService.banUser(userId, days);
+        log.info("[UserController] 계정 정지 완료 - targetUserId: {}, days: {}", userId, days);
         String message = (days == null) ? "사용자 계정이 무기한 정지되었습니다." : "사용자 계정이 " + days + "일 동안 정지되었습니다.";
         return new ResponseEntity<>(new CommonDto(HttpStatus.OK.value(),message,null),HttpStatus.OK);
     }
@@ -224,7 +238,9 @@ public class UserController {
     @PostMapping("/admin/{userId}/unban")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<String> unsuspendUser(@PathVariable Long userId) {
+        log.info("[UserController] 계정 정지 해제 요청 - targetUserId: {}", userId);
         userService.unbanUser(userId);
+        log.info("[UserController] 계정 정지 해제 완료 - targetUserId: {}", userId);
         return ResponseEntity.ok("사용자 계정 정지가 해제되었습니다.");
     }
 

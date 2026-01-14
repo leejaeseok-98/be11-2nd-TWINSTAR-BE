@@ -5,6 +5,7 @@ import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import jakarta.annotation.PostConstruct;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -12,6 +13,7 @@ import javax.crypto.spec.SecretKeySpec;
 import java.security.Key;
 import java.util.Date;
 
+@Slf4j
 @Component
 public class JwtTokenProvider {
     @Value("${jwt.expiration}")
@@ -35,6 +37,7 @@ public class JwtTokenProvider {
     }
 
     public String createToken(Long id, String email, String nickName, String role) {
+        log.debug("[JwtTokenProvider] 액세스 토큰 생성 - userId: {}", id);
         Claims claims = Jwts.claims().setSubject(String.valueOf(id));
         claims.put("role", role);
         claims.put("email", email);
@@ -87,7 +90,9 @@ public class JwtTokenProvider {
 
     // ✅ 리프레시 토큰을 이용한 액세스 토큰 재발행
     public String refreshAccessToken(String refreshToken) {
+        log.info("[JwtTokenProvider] 액세스 토큰 재발행 시도");
         if (!validateToken(refreshToken, true)) {
+            log.warn("[JwtTokenProvider] 유효하지 않은 리프레시 토큰");
             throw new RuntimeException("유효하지 않은 리프레시 토큰입니다.");
         }
 
@@ -97,6 +102,7 @@ public class JwtTokenProvider {
         String role = claims.get("role", String.class);
         String nickName = claims.get("nickName", String.class);
 
+        log.info("[JwtTokenProvider] 액세스 토큰 재발행 성공 - userId: {}", userId);
         return createToken(userId, email, nickName, role);
     }
 }

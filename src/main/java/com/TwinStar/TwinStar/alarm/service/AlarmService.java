@@ -8,6 +8,7 @@ import com.TwinStar.TwinStar.user.domain.User;
 import com.TwinStar.TwinStar.user.repository.UserRepository;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.transaction.Transactional;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.security.core.Authentication;
@@ -19,6 +20,7 @@ import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+@Slf4j
 @Service
 @Transactional
 public class AlarmService {
@@ -35,6 +37,8 @@ public class AlarmService {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         User sender = userRepository.findById(Long.valueOf(authentication.getName())).orElseThrow(()-> new EntityNotFoundException("user is not found."));
         if (sender.equals(receiver)){return ;}
+
+        log.info("[AlarmService] 알림 생성 - receiverId: {}, senderId: {}, content: {}", receiver.getId(), sender.getId(), content);
         Alarm alarm = Alarm.builder()
                 .user(receiver)
                 .sender(sender)
@@ -54,20 +58,25 @@ public class AlarmService {
         SseEmitter emitter = emitters.get(String.valueOf(userId));
         if (emitter != null) {
             try {
+                log.debug("[AlarmService] SSE 알림 전송 - userId: {}", userId);
                 emitter.send(SseEmitter.event().name("alarm").data(dto));
             } catch (IOException e) {
+                log.error("[AlarmService] SSE 알림 전송 실패 - userId: {}", userId, e);
                 emitters.remove(String.valueOf(userId)); // 전송 중 오류 발생하면 제거
             }
         }
     }
 
     public SseEmitter subscribe(Long userId) {
+        log.info("[AlarmService] SSE 구독 시작 - userId: {}", userId);
         SseEmitter emitter = new SseEmitter(60 * 1000L); // 30분
         emitters.put(String.valueOf(userId), emitter);
 
         try {
             emitter.send(SseEmitter.event().name("connect").data("연결 성공"));
+            log.info("[AlarmService] SSE 구독 성공 - userId: {}", userId);
         } catch (IOException e) {
+            log.error("[AlarmService] SSE 구독 실패 - userId: {}", userId, e);
             emitters.remove(String.valueOf(userId));
         }
         return emitter;

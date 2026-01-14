@@ -23,6 +23,7 @@ import com.TwinStar.TwinStar.user.dto.*;
 import com.TwinStar.TwinStar.user.repository.UserRepository;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.persistence.criteria.Predicate;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -45,6 +46,7 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @Transactional(readOnly = true)
 public class UserService {
@@ -81,33 +83,48 @@ public class UserService {
 
 //   1. 로그인
     public User login(LoginDto dto){
+        log.info("[UserService] 로그인 시도 - email: {}", dto.getEmail());
         User user = userRepository.findByEmail(dto.getEmail())
-                .orElseThrow(() -> new LoginFailedException("email 또는 비밀번호가 일치하지 않습니다."));
+                .orElseThrow(() -> {
+                    log.warn("[UserService] 로그인 실패 - 존재하지 않는 이메일: {}", dto.getEmail());
+                    return new LoginFailedException("email 또는 비밀번호가 일치하지 않습니다.");
+                });
 
-        // User 객체에게 검증 위임
-        user.validateLogin();
-        user.validatePassword(dto.getPassword(), passwordEncoder);
-
-        return user;
+        try {
+            // User 객체에게 검증 위임
+            user.validateLogin();
+            user.validatePassword(dto.getPassword(), passwordEncoder);
+            log.info("[UserService] 로그인 성공 - userId: {}, email: {}", user.getId(), user.getEmail());
+            return user;
+        } catch (Exception e) {
+            log.warn("[UserService] 로그인 실패 - email: {}, 사유: {}", dto.getEmail(), e.getMessage());
+            throw e;
+        }
     }
 
     @Transactional
     public void logout() {
         User user = getCurrentUser();
+        log.info("[UserService] 로그아웃 - userId: {}, email: {}", user.getId(), user.getEmail());
         redisTemplate.delete(user.getEmail());
     }
 
 //   2. 회원가입
     @Transactional
     public Long create(UserSaveReq dto) {
+        log.info("[UserService] 회원가입 시도 - email: {}, nickname: {}", dto.getEmail(), dto.getNickName());
+
         if (userRepository.existsByEmail(dto.getEmail())) {
+            log.warn("[UserService] 회원가입 실패 - 중복 이메일: {}", dto.getEmail());
             throw new DuplicateEmailException("중복 이메일입니다.");
         }
 //        닉네임 중복체크 메서드
         if (userRepository.existsByNickName(dto.getNickName())){
+            log.warn("[UserService] 회원가입 실패 - 중복 닉네임: {}", dto.getNickName());
             throw new DuplicateNicknameException("중복된 닉네임입니다");
         }
         User user = userRepository.save(dto.toEntity(passwordEncoder.encode(dto.getPassword())));
+        log.info("[UserService] 회원가입 완료 - userId: {}, email: {}", user.getId(), user.getEmail());
         return user.getId();
     }
 
@@ -356,36 +373,44 @@ public class UserService {
 //  14. 관리자 권한 부여 메소드
     @Transactional
     public void grantAdminRole(Long userid) {
+        log.info("[UserService] 관리자 권한 부여 시작 - targetUserId: {}", userid);
         User receiveUser = checkAdminPrivilegeAndGetTargetUser(userid);
         // User 객체에게 권한 변경 위임
         receiveUser.changeAdmin(AdminYn.ADMIN);
+        log.info("[UserService] 관리자 권한 부여 완료 - targetUserId: {}", userid);
     }
 //   15. 관리자 권한 회수 메소드
     @Transactional
     public void revokeAdminRole(Long userid) {
+        log.info("[UserService] 관리자 권한 회수 시작 - targetUserId: {}", userid);
         User receiveUser = checkAdminPrivilegeAndGetTargetUser(userid);
         // User 객체에게 권한 변경 위임
         receiveUser.changeAdmin(AdminYn.USER);
+        log.info("[UserService] 관리자 권한 회수 완료 - targetUserId: {}", userid);
     }
 
 //  16. 계정 정지
     @Transactional
     public void banUser(Long userId, Integer days) {
+        log.info("[UserService] 계정 정지 시작 - targetUserId: {}, days: {}", userId, days);
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new EntityNotFoundException("해당 사용자를 찾을 수 없습니다."));
 
         user.ban(days); // User 엔티티 내 메서드 호출
         userRepository.save(user);
+        log.info("[UserService] 계정 정지 완료 - targetUserId: {}, days: {}", userId, days);
     }
 
 //  17.계정 정지 해제
     @Transactional
     public void unbanUser(Long userId) {
+        log.info("[UserService] 계정 정지 해제 시작 - targetUserId: {}", userId);
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new EntityNotFoundException("해당 사용자를 찾을 수 없습니다."));
 
         user.unban();
         userRepository.save(user);
+        log.info("[UserService] 계정 정지 해제 완료 - targetUserId: {}", userId);
     }
 
 //    파일 경로에서 파일명만 추출하는 메서드

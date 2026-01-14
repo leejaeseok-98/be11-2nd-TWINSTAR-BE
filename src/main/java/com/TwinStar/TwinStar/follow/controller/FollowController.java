@@ -5,6 +5,7 @@ import com.TwinStar.TwinStar.common.dto.CommonDto;
 import com.TwinStar.TwinStar.follow.dto.FollowDto;
 import com.TwinStar.TwinStar.user.domain.User;
 import com.TwinStar.TwinStar.follow.service.FollowService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -12,6 +13,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.http.HttpHeaders;
 import java.util.List;
 
+@Slf4j
 @RequestMapping("/follow")
 @RestController
 public class FollowController {
@@ -26,8 +28,9 @@ public class FollowController {
 //    토글 팔로우/언팔로우 요청
     @PostMapping("/toggle/{receiveUserId}")
     public ResponseEntity<?> toggleFollow(@PathVariable Long receiveUserId) {
-
+        log.info("[FollowController] 팔로우 토글 요청 - receiveUserId: {}", receiveUserId);
         boolean isFollowing = followService.toggleFollow(receiveUserId);
+        log.info("[FollowController] 팔로우 토글 완료 - receiveUserId: {}, isFollowing: {}", receiveUserId, isFollowing);
 
         if (isFollowing) {
             return new ResponseEntity<>(new CommonDto(HttpStatus.OK.value(), "팔로우 되었습니다.",isFollowing),HttpStatus.OK);

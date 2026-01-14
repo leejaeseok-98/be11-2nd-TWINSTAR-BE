@@ -8,6 +8,7 @@ import com.TwinStar.TwinStar.comment.service.CommentLikeService;
 import com.TwinStar.TwinStar.comment.service.CommentService;
 import com.TwinStar.TwinStar.common.dto.CommonDto;
 import com.TwinStar.TwinStar.user.dto.UserListResDto;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
+@Slf4j
 @RequestMapping("/comment")
 @RestController
 public class CommentController {
@@ -30,7 +32,9 @@ public class CommentController {
 
     @PostMapping("/create")
     public ResponseEntity<?> createComment(@RequestBody CommentCreateReqDto dto){
+        log.info("[CommentController] 댓글 작성 요청 - postId: {}", dto.getPostId());
         Long postId = commentService.create(dto);
+        log.info("[CommentController] 댓글 작성 완료 - postId: {}", postId);
         return new ResponseEntity<>(new CommonDto(HttpStatus.OK.value(), "댓글 작성 완료",postId),HttpStatus.OK);
     }
 

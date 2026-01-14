@@ -9,6 +9,7 @@ import com.TwinStar.TwinStar.common.dto.CommonDto;
 import com.TwinStar.TwinStar.user.domain.User;
 import com.TwinStar.TwinStar.user.dto.ChatUserListDto;
 import jakarta.persistence.EntityNotFoundException;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Map;
 
+@Slf4j
 @RestController
 @RequestMapping("/chat")
 public class ChatController {
@@ -30,7 +32,9 @@ public class ChatController {
 //    채팅방 개설
     @PostMapping("room/create")
     public ResponseEntity<?> RoomOpen(@RequestBody ChatRoomCreateReqDto chatRoomCreateReqDto){
+        log.info("[ChatController] 채팅방 개설 요청");
         Long chatRoomId = chatService.RoomOpen(chatRoomCreateReqDto);
+        log.info("[ChatController] 채팅방 개설 완료 - chatRoomId: {}", chatRoomId);
         return new ResponseEntity<>(new CommonDto(HttpStatus.OK.value(), "채팅방 개설 완료",chatRoomId),HttpStatus.OK);
     }
 

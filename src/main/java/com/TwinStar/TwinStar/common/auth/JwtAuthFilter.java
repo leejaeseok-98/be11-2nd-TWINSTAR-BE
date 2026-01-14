@@ -5,6 +5,7 @@ import io.jsonwebtoken.JwtException;
 import jakarta.servlet.*;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -18,6 +19,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+@Slf4j
 @Component
 public class JwtAuthFilter extends GenericFilterBean {
     private final JwtUtil jwtUtil;
@@ -40,11 +42,13 @@ public class JwtAuthFilter extends GenericFilterBean {
 
                 // 🔹 토큰 검증 (예외 발생 시 catch 블록에서 처리됨)
                 if (!jwtUtil.validateToken(token)) {
+                    log.warn("[JwtAuthFilter] 유효하지 않은 토큰");
                     throw new JwtException("유효하지 않은 토큰입니다.");
                 }
 
                 // 🔹 유저 ID 가져오기
                 Long userId = jwtUtil.getUserId(token);
+                log.debug("[JwtAuthFilter] JWT 인증 성공 - userId: {}", userId);
 
                 // 🔹 인증 객체 생성
                 User userDetails = new User(userId.toString(), "", Collections.emptyList());
@@ -58,6 +62,7 @@ public class JwtAuthFilter extends GenericFilterBean {
 
             filterChain.doFilter(request, response);
         } catch (JwtException e) {
+            log.error("[JwtAuthFilter] JWT 인증 실패: {}", e.getMessage());
             response.setStatus(HttpStatus.UNAUTHORIZED.value());
             response.getWriter().write("Invalid token: " + e.getMessage());
         }
