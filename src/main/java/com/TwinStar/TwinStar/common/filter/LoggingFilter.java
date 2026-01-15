@@ -9,6 +9,7 @@ import org.springframework.web.util.ContentCachingRequestWrapper;
 import org.springframework.web.util.ContentCachingResponseWrapper;
 
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.Map;
@@ -52,8 +53,12 @@ public class LoggingFilter implements Filter {
 
         byte[] content = request.getContentAsByteArray();
         if (content.length > 0) {
-            String body = new String(content, request.getCharacterEncoding());
-            log.debug("[Request Body] {}", body);
+            try {
+                String body = new String(content, request.getCharacterEncoding());
+                log.debug("[Request Body] {}", body);
+            } catch (UnsupportedEncodingException e) {
+                log.error("[Request Body] Encoding error", e);
+            }
         }
     }
 
@@ -64,8 +69,12 @@ public class LoggingFilter implements Filter {
 
         byte[] content = response.getContentAsByteArray();
         if (content.length > 0 && log.isDebugEnabled()) {
-            String body = new String(content, response.getCharacterEncoding());
-            log.debug("[Response Body] {}", body);
+            try {
+                String body = new String(content, response.getCharacterEncoding());
+                log.debug("[Response Body] {}", body);
+            } catch (UnsupportedEncodingException e) {
+                log.error("[Response Body] Encoding error", e);
+            }
         }
     }
 

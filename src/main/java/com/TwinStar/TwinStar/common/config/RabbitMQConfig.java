@@ -24,8 +24,8 @@ public class RabbitMQConfig {
     @Value("${spring.rabbitmq.password}")
     private String password;
 
-    @Value("${spring.rabbitmq.virtual-host}")
-    private String virtualHost;
+    // @Value("${spring.rabbitmq.virtual-host}")
+    // private String virtualHost;
 
     public static final String BACKUP_QUEUE_AL="backupAddLike";
     public static final String BACKUP_QUEUE_ML="backupMinusLike";
@@ -57,7 +57,7 @@ public class RabbitMQConfig {
         connectionFactory.setPort(port);
         connectionFactory.setUsername(username);
         connectionFactory.setPassword(password);
-        connectionFactory.setVirtualHost(virtualHost);
+        // connectionFactory.setVirtualHost(virtualHost);
         return connectionFactory;
     }
 

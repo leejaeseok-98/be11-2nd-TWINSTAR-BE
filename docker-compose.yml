@@ -5,7 +5,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: spring-app
-    restart: always
+    restart: no
     ports:
       - "8080:8080"
     environment:
@@ -27,6 +27,18 @@ services:
       # Actuator (Prometheus 메트릭)
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: prometheus,health,metrics
       MANAGEMENT_METRICS_EXPORT_PROMETHEUS_ENABLED: true
+      
+      # JWT
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      JWT_SECRET_KEY_RT: ${JWT_SECRET_KEY_RT}
+      JWT_EXPIRATION: ${JWT_EXPIRATION}
+      JWT_EXPIRATION_RT: ${JWT_EXPIRATION_RT}
+
+      # AWS S3
+      CLOUD_AWS_CREDENTIALS_ACCESS_KEY: ${CLOUD_AWS_CREDENTIALS_ACCESS_KEY}
+      CLOUD_AWS_CREDENTIALS_SECRET_KEY: ${CLOUD_AWS_CREDENTIALS_SECRET_KEY}
+      CLOUD_AWS_REGION_STATIC: ${CLOUD_AWS_REGION_STATIC}
+      CLOUD_AWS_S3_BUCKET: ${CLOUD_AWS_S3_BUCKET}
 
       # Profile
       SPRING_PROFILES_ACTIVE: docker
