@@ -7,6 +7,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.BatchSize;
 
 import java.util.List;
 
@@ -15,6 +16,7 @@ import java.util.List;
 @Getter
 @Builder
 @Entity
+@BatchSize(size = 100)
 public class PostHashTag {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

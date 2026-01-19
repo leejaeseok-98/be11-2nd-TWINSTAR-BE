@@ -7,12 +7,14 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.BatchSize;
 
 @Entity
 @AllArgsConstructor
 @NoArgsConstructor
 @Getter
 @Builder
+@BatchSize(size = 100)
 public class CommentLike {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

@@ -12,6 +12,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.BatchSize;
 import org.springframework.security.access.AccessDeniedException;
 
 import java.util.ArrayList;
@@ -39,19 +40,24 @@ public class Post extends BaseTimeEntity {
     @Builder.Default
     private String postDel = "N";
 
+    @Enumerated(EnumType.STRING)
     private Visibility visibility;
 
     private Long score;
 
+    @BatchSize(size = 100)
     @OneToMany(mappedBy = "post", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<PostLike> postLikes = new ArrayList<>();
 
+    @BatchSize(size = 100)
     @OneToMany(mappedBy = "post", cascade = CascadeType.REMOVE, orphanRemoval = true)
     private List<PostFile> postFile = new ArrayList<>();
 
+    @BatchSize(size = 100)
     @OneToMany(mappedBy = "post", cascade = CascadeType.REMOVE, orphanRemoval = true)
     private List<PostHashTag> hashTag = new ArrayList<>();
 
+    @BatchSize(size = 100)
     @OneToMany(mappedBy = "post", cascade = CascadeType.REMOVE, orphanRemoval = true)
     private List<Comment> comment = new ArrayList<>();
 

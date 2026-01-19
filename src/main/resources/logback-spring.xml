@@ -93,15 +93,15 @@
         </root>
 
         <!-- 패키지별 로그 레벨 설정 -->
-        <logger name="com.TwinStar.TwinStar" level="DEBUG"/>
-        <logger name="com.TwinStar.TwinStar.aop" level="INFO" additivity="false">
+        <logger name="com.TwinStar.TwinStar" level="OFF"/>
+        <logger name="com.TwinStar.TwinStar.aop" level="OFF" additivity="false">
             <appender-ref ref="CONSOLE"/>
             <appender-ref ref="API_FILE"/>
         </logger>
-        <logger name="org.springframework.web" level="DEBUG"/>
-        <logger name="org.hibernate.SQL" level="DEBUG"/>
-        <logger name="org.hibernate.type.descriptor.sql.BasicBinder" level="TRACE"/>
-        <logger name="p6spy" level="INFO" additivity="false">
+        <logger name="org.springframework.web" level="OFF"/>
+        <logger name="org.hibernate.SQL" level="OFF"/>
+        <logger name="org.hibernate.type.descriptor.sql.BasicBinder" level="OFF"/>
+        <logger name="p6spy" level="OFF" additivity="false">
             <appender-ref ref="CONSOLE"/>
             <appender-ref ref="SQL_FILE"/>
         </logger>
@@ -113,12 +113,12 @@
             <appender-ref ref="ERROR_FILE"/>
         </root>
 
-        <logger name="com.TwinStar.TwinStar" level="INFO"/>
-        <logger name="com.TwinStar.TwinStar.aop" level="INFO" additivity="false">
+        <logger name="com.TwinStar.TwinStar" level="OFF"/>
+        <logger name="com.TwinStar.TwinStar.aop" level="OFF" additivity="false">
             <appender-ref ref="API_FILE"/>
         </logger>
-        <logger name="org.springframework.web" level="WARN"/>
-        <logger name="p6spy" level="INFO" additivity="false">
+        <logger name="org.springframework.web" level="OFF"/>
+        <logger name="p6spy" level="OFF" additivity="false">
             <appender-ref ref="SQL_FILE"/>
         </logger>
     </springProfile>
@@ -130,12 +130,12 @@
             <appender-ref ref="ERROR_FILE"/>
         </root>
 
-        <logger name="com.TwinStar.TwinStar" level="INFO"/>
-        <logger name="com.TwinStar.TwinStar.aop" level="INFO" additivity="false">
+        <logger name="com.TwinStar.TwinStar" level="OFF"/>
+        <logger name="com.TwinStar.TwinStar.aop" level="OFF" additivity="false">
             <appender-ref ref="CONSOLE"/>
             <appender-ref ref="API_FILE"/>
         </logger>
-        <logger name="p6spy" level="INFO" additivity="false">
+        <logger name="p6spy" level="OFF" additivity="false">
             <appender-ref ref="CONSOLE"/>
             <appender-ref ref="SQL_FILE"/>
         </logger>

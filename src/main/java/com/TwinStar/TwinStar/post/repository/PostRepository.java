@@ -28,8 +28,23 @@ public interface PostRepository extends JpaRepository<Post,Long> {
 //                                       @Param("userIds") List<Long> userIds,
 //                                       Pageable pageable);
 
-    @Query("""
+    @Query(value = """
     SELECT p FROM Post p
+    JOIN FETCH p.user
+    WHERE
+        p.user.id = :currentUserId
+
+        OR p.user.idVisibility = 'ALL'
+
+        OR (p.user.idVisibility = 'FOLLOW' AND p.user.id IN (
+                        SELECT f.receiveUser.id FROM Follow f
+                        WHERE f.user.id = :currentUserId AND f.followYn = 'Y'
+                        AND f.receiveUser.id IN (
+                            SELECT f2.user.id FROM Follow f2 WHERE f2.receiveUser.id = :currentUserId AND f2.followYn = 'Y'
+                        )
+                    ))
+""", countQuery = """
+    SELECT count(p) FROM Post p
     WHERE
         p.user.id = :currentUserId
 
@@ -48,6 +63,7 @@ public interface PostRepository extends JpaRepository<Post,Long> {
     @Query("""
     SELECT DISTINCT p 
     FROM Post p
+    JOIN FETCH p.user
     JOIN p.hashTag pht
     JOIN pht.hashTag h
     WHERE 

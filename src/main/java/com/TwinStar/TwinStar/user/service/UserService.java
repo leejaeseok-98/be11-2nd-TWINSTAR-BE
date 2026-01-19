@@ -262,7 +262,7 @@ public class UserService {
                 .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다."));
 
         User currentUser = getCurrentUser();
-        
+
         // User 객체에게 검증 위임
         user.validateSelf(currentUser);
         user.validatePassword(request.getCurrentPassword(), passwordEncoder);
@@ -294,7 +294,7 @@ public class UserService {
 
         // User 객체에게 상태 변경 위임 (내부에서 검증 후 변경)
         user.changeStatus(newStatus);
-        
+
         userRepository.save(user);
     }
 

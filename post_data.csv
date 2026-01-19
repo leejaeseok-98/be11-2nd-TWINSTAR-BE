@@ -1,0 +1,6 @@
+content,hashTag,visibility,imageFile
+"First post content","tag1,tag2",ALL,"C:/images/test1.jpg"
+"Second post content","tag3",FOLLOW,"C:/images/test2.jpg"
+"Third post content","",ONLYME,"C:/images/test3.jpg"
+"Fourth post content","tag1,tag4",ALL,"C:/images/test4.jpg"
+"Fifth post content","tag2,tag5",FOLLOW,"C:/images/test5.jpg"

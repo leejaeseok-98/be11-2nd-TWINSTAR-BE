@@ -8,6 +8,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.BatchSize;
 import org.springframework.security.access.AccessDeniedException;
 
 import java.util.ArrayList;
@@ -39,10 +40,12 @@ public class Comment extends BaseTimeEntity {
     @JoinColumn(name = "parent_id")
     private Comment parent;
 
+    @BatchSize(size = 100)
     @OneToMany(mappedBy = "parent" , cascade = CascadeType.ALL)
     @Builder.Default
     private List<Comment> child = new ArrayList<>();
 
+    @BatchSize(size = 100)
     @OneToMany(mappedBy = "comment" , cascade = CascadeType.ALL, orphanRemoval = true)
     private List<CommentLike> commentLike = new ArrayList<>();
 

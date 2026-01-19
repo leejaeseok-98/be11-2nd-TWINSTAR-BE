@@ -178,17 +178,14 @@ public class PostService {
         List<Long> postIds = postPage.getContent().stream().map(Post::getId).collect(Collectors.toList());
         List<Long> authorIds = postPage.getContent().stream().map(post -> post.getUser().getId()).collect(Collectors.toList());
 
-        // 좋아요 수, 댓글 수 일괄 조회 (N+1 해결)
         Map<Long, Long> likeCounts = postLikeRepository.countByPostIds(postIds).stream()
                 .collect(Collectors.toMap(o -> (Long) o[0], o -> (Long) o[1]));
         
         Map<Long, Long> commentCounts = commentRepository.countByPostIds(postIds).stream()
                 .collect(Collectors.toMap(o -> (Long) o[0], o -> (Long) o[1]));
 
-        // 로그인한 유저가 좋아요한 게시물 ID 목록 조회 (N+1 해결)
         Set<Long> likedPostIds = postLikeRepository.findLikedPostIdsByUserId(loginUser.getId(), postIds);
 
-        // 로그인한 유저가 팔로우한 작성자 ID 목록 조회 (N+1 해결)
         Set<Long> followingAuthorIds = followRepository.findFollowingUserIdsIn(loginUser.getId(), authorIds);
 
         return postPage.map(post -> {

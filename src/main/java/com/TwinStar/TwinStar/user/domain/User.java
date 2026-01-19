@@ -13,6 +13,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.BatchSize;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
@@ -59,6 +60,7 @@ public class User extends BaseTimeEntity {
     @Enumerated(EnumType.STRING)
     private UserStatus userStatus = UserStatus.ACTIVE;
     private LocalDateTime banCloseTime; // 정지 해제 날짜
+    @BatchSize(size = 100)
     @OneToMany(mappedBy = "user", cascade = CascadeType.PERSIST)//자동저장/ 삭제는 메소드 사용
     @Builder.Default //회원가입하면 게시물이 0개
     private List<Post> posts = new ArrayList<>();//ProfilePostResDto를 가져올 수 없음.post를 가져와야함

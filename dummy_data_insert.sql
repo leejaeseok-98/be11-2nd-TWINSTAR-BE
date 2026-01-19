@@ -13,7 +13,7 @@ BEGIN
 
     WHILE i <= 10000 DO
         -- 랜덤 성별 선택
-        SET random_sex = ELT(1 + FLOOR(RAND() * 2), 'MALE', 'FEMALE');
+        SET random_sex = ELT(1 + FLOOR(RAND() * 2), 'MAN', 'WOMAN');
 
         -- 랜덤 가시성 선택
         SET random_visibility = ELT(1 + FLOOR(RAND() * 4), 'ALL', 'FOLLOW', 'ONLYME',"LOCK");
