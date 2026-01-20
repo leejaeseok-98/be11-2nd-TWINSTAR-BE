@@ -20,7 +20,10 @@ import com.TwinStar.TwinStar.user.domain.User;
 import com.TwinStar.TwinStar.user.dto.UserListResDto;
 import com.TwinStar.TwinStar.user.repository.UserRepository;
 import jakarta.persistence.EntityNotFoundException;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.*;
 import org.springframework.security.access.AccessDeniedException;
@@ -28,19 +31,24 @@ import org.springframework.security.authentication.AuthenticationCredentialsNotF
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 import java.util.stream.Collectors;
 
 @Slf4j
 @Service
-@Transactional
 public class PostService {
 
     private final PostRepository postRepository;
@@ -54,13 +62,16 @@ public class PostService {
     private final PostLikeRepository postLikeRepository;
 
     private final S3Client s3Client;
+    private final TransactionTemplate transactionTemplate;
+    private final Executor imageUploadExecutor; // 커스텀 스레드 풀
+
     @Value("${cloud.aws.s3.bucket}")
     private String bucket;
     @Value("${cloud.aws.region.static}")
     private String region;
 
     public PostService(PostRepository postRepository, UserRepository userRepository, PostFileRepository postFileRepository
-            , HashTagService hashTagService, PostHashTagRepository postHashTagRepository, FollowRepository followRepository, CommentRepository commentRepository, CommentLikeRepository commentLikeRepository, PostLikeRepository postLikeRepository, S3Client s3Client) {
+            , HashTagService hashTagService, PostHashTagRepository postHashTagRepository, FollowRepository followRepository, CommentRepository commentRepository, CommentLikeRepository commentLikeRepository, PostLikeRepository postLikeRepository, S3Client s3Client, PlatformTransactionManager transactionManager, @Qualifier("imageUploadExecutor") Executor imageUploadExecutor) {
         this.postRepository = postRepository;
         this.userRepository = userRepository;
         this.postFileRepository = postFileRepository;
@@ -71,6 +82,13 @@ public class PostService {
         this.commentLikeRepository = commentLikeRepository;
         this.postLikeRepository = postLikeRepository;
         this.s3Client = s3Client;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
+        this.imageUploadExecutor = imageUploadExecutor;
+        
+        // 트랜잭션 설정
+        this.transactionTemplate.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED); // 격리 수준: READ_COMMITTED
+        this.transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRED); // 전파 속성: REQUIRED (기본값)
+        this.transactionTemplate.setTimeout(30); // 타임아웃: 30초
     }
 
     private User getCurrentUser() {
@@ -83,41 +101,85 @@ public class PostService {
         return userRepository.getReferenceById(userId);
     }
 
-    public Long save(PostCreateReqDto dto) {
-        User user = getCurrentUser();
-        Post post = postRepository.save(dto.toEntity(user));
-        
-        // 이미지 일괄 저장 (Bulk Insert)
-        if (dto.getImageFile() != null && !dto.getImageFile().isEmpty()) {
-            List<PostFile> postFiles = new ArrayList<>();
-            for (MultipartFile file : dto.getImageFile()){
-                String fileUrl = uploadImage(file);
-                postFiles.add(new PostFile(post, fileUrl));
-            }
-            postFileRepository.saveAll(postFiles);
-        }
-
-        // 해시태그 일괄 처리 (Bulk Insert)
-        List<String> tagNames = Optional.ofNullable(dto.getHashTag()).orElse(Collections.emptyList());
-        if (!tagNames.isEmpty()) {
-            List<HashTag> hashTags = hashTagService.findOrCreateHashTags(tagNames);
-            
-            List<PostHashTag> postHashTags = hashTags.stream()
-                    .map(hashTag -> PostHashTag.builder()
-                            .post(post)
-                            .hashTag(hashTag)
-                            .build())
-                    .collect(Collectors.toList());
-            
-            postHashTagRepository.saveAll(postHashTags);
-        }
-        
-        return post.getId();
+    // 업로드 결과를 담을 내부 클래스 (메모리 최적화)
+    @Getter
+    @AllArgsConstructor
+    private static class UploadResult {
+        private String fileUrl;
+        private String fileName;
     }
 
-    public String uploadImage(MultipartFile file) {
-        String fileName = UUID.randomUUID() + "_" + file.getOriginalFilename();
+    public Long save(PostCreateReqDto dto) {
+        User user = getCurrentUser();
 
+        List<UploadResult> uploadResults = new ArrayList<>();
+
+        try {
+            // 1. S3 병렬 업로드 (CompletableFuture 사용 - 메모리 최적화 & 커스텀 스레드 풀)
+            if (dto.getImageFile() != null && !dto.getImageFile().isEmpty()) {
+                List<CompletableFuture<UploadResult>> futures = dto.getImageFile().stream()
+                        .map(file -> CompletableFuture.supplyAsync(() -> {
+                            String fileName = UUID.randomUUID() + "_" + file.getOriginalFilename();
+                            String fileUrl = uploadImage(file, fileName);
+                            return new UploadResult(fileUrl, fileName);
+                        }, imageUploadExecutor)) // 커스텀 스레드 풀 사용
+                        .collect(Collectors.toList());
+
+                // 모든 업로드가 끝날 때까지 대기 후 결과 수집
+                uploadResults = futures.stream()
+                        .map(CompletableFuture::join)
+                        .collect(Collectors.toList());
+            }
+
+            // final 변수로 만들어 람다 내부에서 사용 가능하게 함
+            List<UploadResult> finalUploadResults = uploadResults;
+
+            // 2. DB 저장 (트랜잭션 내부)
+            return transactionTemplate.execute(status -> {
+                Post post = postRepository.save(dto.toEntity(user));
+
+                // 이미지 일괄 저장 (Bulk Insert)
+                if (!finalUploadResults.isEmpty()) {
+                    List<PostFile> postFiles = finalUploadResults.stream()
+                            .map(result -> new PostFile(post, result.getFileUrl()))
+                            .collect(Collectors.toList());
+                    postFileRepository.saveAll(postFiles);
+                }
+
+                List<String> tagNames = Optional.ofNullable(dto.getHashTag()).orElse(Collections.emptyList());
+                if (!tagNames.isEmpty()) {
+                    List<HashTag> hashTags = hashTagService.findOrCreateHashTags(tagNames);
+
+                    List<PostHashTag> postHashTags = hashTags.stream()
+                            .map(hashTag -> PostHashTag.builder()
+                                    .post(post)
+                                    .hashTag(hashTag)
+                                    .build())
+                            .collect(Collectors.toList());
+
+                    postHashTagRepository.saveAll(postHashTags);
+                }
+
+                return post.getId();
+            });
+        } catch (Exception e) {
+            // 3. 예외 발생 시 S3 파일 삭제 (보상 트랜잭션)
+            for (UploadResult result : uploadResults) {
+                try {
+                    s3Client.deleteObject(DeleteObjectRequest.builder()
+                            .bucket(bucket)
+                            .key(result.getFileName())
+                            .build());
+                } catch (Exception s3Ex) {
+                    log.error("Failed to delete file from S3 during rollback: {}", result.getFileName(), s3Ex);
+                }
+            }
+            throw e;
+        }
+    }
+
+    // 파일명(Key)을 외부에서 지정할 수 있도록 오버로딩
+    public String uploadImage(MultipartFile file, String fileName) {
         try {
             s3Client.putObject(
                     PutObjectRequest.builder()
@@ -134,6 +196,13 @@ public class PostService {
         }
     }
 
+    // 기존 메서드 유지 (다른 곳에서 사용할 수 있으므로)
+    public String uploadImage(MultipartFile file) {
+        String fileName = UUID.randomUUID() + "_" + file.getOriginalFilename();
+        return uploadImage(file, fileName);
+    }
+
+    @Transactional
     public void delete(Long postId) {
         User loginUser = getCurrentUser();
         Post post = postRepository.findById(postId).orElseThrow(()-> new EntityNotFoundException("post is not found."));
@@ -146,6 +215,7 @@ public class PostService {
         postRepository.delete(post);
     }
 
+    @Transactional
     public void Update(Long postId, PostUpdateReqDto dto) {
         User loginUser = getCurrentUser();
         Post post = postRepository.findById(postId).orElseThrow(()-> new EntityNotFoundException("post is not found."));
@@ -176,6 +246,7 @@ public class PostService {
 
     }
 
+    @Transactional(readOnly = true)
     public PostUpdateResDto getUpdateDataRes(Long postId) {
         User loginUser = getCurrentUser();
         Post post = postRepository.findById(postId).orElseThrow(()-> new EntityNotFoundException("post is not found."));
