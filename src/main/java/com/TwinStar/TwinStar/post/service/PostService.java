@@ -23,6 +23,7 @@ import jakarta.persistence.EntityNotFoundException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.*;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -78,25 +79,39 @@ public class PostService {
             throw new AuthenticationCredentialsNotFoundException("인증 정보가 존재하지 않습니다.");
         }
         Long userId = Long.valueOf(authentication.getName());
-        return userRepository.findById(userId)
-                .orElseThrow(() -> new EntityNotFoundException("User not found with id: " + userId));
+        // getReferenceById를 사용하여 불필요한 SELECT 쿼리 방지 (프록시 객체 반환)
+        return userRepository.getReferenceById(userId);
     }
 
     public Long save(PostCreateReqDto dto) {
         User user = getCurrentUser();
         Post post = postRepository.save(dto.toEntity(user));
-        for (MultipartFile file : dto.getImageFile()){
-            String fileUrl = uploadImage(file);
-            postFileRepository.save(new PostFile(post,fileUrl));
+        
+        // 이미지 일괄 저장 (Bulk Insert)
+        if (dto.getImageFile() != null && !dto.getImageFile().isEmpty()) {
+            List<PostFile> postFiles = new ArrayList<>();
+            for (MultipartFile file : dto.getImageFile()){
+                String fileUrl = uploadImage(file);
+                postFiles.add(new PostFile(post, fileUrl));
+            }
+            postFileRepository.saveAll(postFiles);
         }
-        for (String tag: Optional.ofNullable(dto.getHashTag()).orElse(Collections.emptyList()) ){
-            HashTag hashTag = hashTagService.findOrCreateHashTag(tag);
-            PostHashTag postHashTag = PostHashTag.builder()
-                    .post(post)
-                    .hashTag(hashTag)
-                    .build();
-            postHashTagRepository.save(postHashTag);
+
+        // 해시태그 일괄 처리 (Bulk Insert)
+        List<String> tagNames = Optional.ofNullable(dto.getHashTag()).orElse(Collections.emptyList());
+        if (!tagNames.isEmpty()) {
+            List<HashTag> hashTags = hashTagService.findOrCreateHashTags(tagNames);
+            
+            List<PostHashTag> postHashTags = hashTags.stream()
+                    .map(hashTag -> PostHashTag.builder()
+                            .post(post)
+                            .hashTag(hashTag)
+                            .build())
+                    .collect(Collectors.toList());
+            
+            postHashTagRepository.saveAll(postHashTags);
         }
+        
         return post.getId();
     }
 
@@ -124,7 +139,9 @@ public class PostService {
         Post post = postRepository.findById(postId).orElseThrow(()-> new EntityNotFoundException("post is not found."));
         
         // 권한 검증 위임
-        post.validateOwner(loginUser);
+        if (!post.getUser().getId().equals(loginUser.getId())) {
+             throw new AccessDeniedException("해당 게시물에 대한 권한이 없습니다.");
+        }
         
         postRepository.delete(post);
     }
@@ -133,19 +150,28 @@ public class PostService {
         User loginUser = getCurrentUser();
         Post post = postRepository.findById(postId).orElseThrow(()-> new EntityNotFoundException("post is not found."));
         
-        // 권한 검증 위임
-        post.validateOwner(loginUser);
+        // 권한 검증
+        if (!post.getUser().getId().equals(loginUser.getId())) {
+             throw new AccessDeniedException("해당 게시물에 대한 권한이 없습니다.");
+        }
         
         post.updateContent(dto.getContent());
 
         hashTagService.removeAllHashtagsFromPost(post);
-        for (String tag: dto.getHashTag()){
-            HashTag hashTag = hashTagService.findOrCreateHashTag(tag);
-            PostHashTag postHashTag = PostHashTag.builder()
-                    .post(post)
-                    .hashTag(hashTag)
-                    .build();
-            postHashTagRepository.save(postHashTag);
+        
+        // 해시태그 일괄 처리 (Bulk Insert)
+        List<String> tagNames = dto.getHashTag();
+        if (tagNames != null && !tagNames.isEmpty()) {
+            List<HashTag> hashTags = hashTagService.findOrCreateHashTags(tagNames);
+            
+            List<PostHashTag> postHashTags = hashTags.stream()
+                    .map(hashTag -> PostHashTag.builder()
+                            .post(post)
+                            .hashTag(hashTag)
+                            .build())
+                    .collect(Collectors.toList());
+            
+            postHashTagRepository.saveAll(postHashTags);
         }
 
     }
@@ -154,8 +180,10 @@ public class PostService {
         User loginUser = getCurrentUser();
         Post post = postRepository.findById(postId).orElseThrow(()-> new EntityNotFoundException("post is not found."));
         
-        // 권한 검증 위임
-        post.validateOwner(loginUser);
+        // 권한 검증
+        if (!post.getUser().getId().equals(loginUser.getId())) {
+             throw new AccessDeniedException("해당 게시물에 대한 권한이 없습니다.");
+        }
         
         List<String> postUrlList = post.getFileUrls();
         List<String> postHashTagList = hashTagService.getHashTagsByPost(post);

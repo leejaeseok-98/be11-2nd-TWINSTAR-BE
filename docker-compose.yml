@@ -95,6 +95,7 @@ services:
       - --slow-query-log=1
       - --long-query-time=1
       - --log-output=TABLE
+      - --max-connections=100
     healthcheck:
       test: [ "CMD", "healthcheck.sh", "--connect", "--innodb_initialized" ]
       interval: 10s

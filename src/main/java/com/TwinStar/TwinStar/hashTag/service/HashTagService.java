@@ -14,7 +14,11 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -34,6 +38,31 @@ public class HashTagService {
     public HashTag findOrCreateHashTag(String hashTagName){
         return hashTagRepository.findByHashTagName(hashTagName).orElseGet(()->hashTagRepository
                 .save(HashTag.builder().hashTagName(hashTagName).build())); //orElseGet은 앞에 메서드가 null값일 때. 매개변수에 있는 값을 호출함. 기본값이 있으면 실행하지 않음
+    }
+
+    // 여러 해시태그를 한 번에 처리
+    public List<HashTag> findOrCreateHashTags(List<String> hashTagNames) {
+        if (hashTagNames == null || hashTagNames.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        List<HashTag> existingTags = hashTagRepository.findByHashTagNameIn(hashTagNames);
+
+        Set<String> existingTagNames = existingTags.stream()
+                .map(HashTag::getHashTagName)
+                .collect(Collectors.toSet());
+
+        List<HashTag> newTags = hashTagNames.stream()
+                .filter(name -> !existingTagNames.contains(name))
+                .map(name -> HashTag.builder().hashTagName(name).build())
+                .collect(Collectors.toList());
+
+        if (!newTags.isEmpty()) {
+            List<HashTag> savedTags = hashTagRepository.saveAll(newTags);
+            existingTags.addAll(savedTags);
+        }
+
+        return existingTags;
     }
 
 //    해시태그로 게시물 조회
