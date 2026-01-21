@@ -29,12 +29,16 @@ public class PostListResDto {
     private String isFollow;
 
     public static PostListResDto fromEntity(Post post, Long likeCount, Long commentCount, List<String> hashTags, String isLike, String isFollow) {
+        return fromEntity(post, likeCount, commentCount, hashTags, isLike, isFollow, post.getFileUrls());
+    }
+
+    public static PostListResDto fromEntity(Post post, Long likeCount, Long commentCount, List<String> hashTags, String isLike, String isFollow, List<String> imageList) {
         return PostListResDto.builder()
                 .userId(post.getUser().getId())
                 .nickName(post.getUser().getNickName())
                 .profileImage(post.getUser().getProfileImg())
                 .postId(post.getId())
-                .imageList(post.getFileUrls())
+                .imageList(imageList)
                 .content(post.getContent())
                 .likeCount(likeCount)
                 .commentCount(commentCount)

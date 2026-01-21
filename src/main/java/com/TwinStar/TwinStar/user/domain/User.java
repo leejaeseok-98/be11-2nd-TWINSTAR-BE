@@ -29,6 +29,7 @@ import java.util.List;
 @Table(name = "user")
 @Transactional
 @Builder
+@BatchSize(size = 100)
 public class User extends BaseTimeEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

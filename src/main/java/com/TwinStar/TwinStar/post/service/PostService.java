@@ -3,7 +3,6 @@ package com.TwinStar.TwinStar.post.service;
 import com.TwinStar.TwinStar.comment.domain.Comment;
 import com.TwinStar.TwinStar.comment.repository.CommentLikeRepository;
 import com.TwinStar.TwinStar.comment.repository.CommentRepository;
-import com.TwinStar.TwinStar.common.domain.Visibility;
 import com.TwinStar.TwinStar.common.domain.YN;
 import com.TwinStar.TwinStar.follow.repository.FollowRepository;
 import com.TwinStar.TwinStar.hashTag.domain.HashTag;
@@ -287,13 +286,28 @@ public class PostService {
 
         Set<Long> followingAuthorIds = followRepository.findFollowingUserIdsIn(loginUser.getId(), authorIds);
 
+        // 게시물 파일 일괄 조회 (N+1 해결)
+        List<PostFile> allPostFiles = postFileRepository.findByPostIn(postPage.getContent());
+        Map<Long, List<String>> postFileMap = allPostFiles.stream()
+                .collect(Collectors.groupingBy(
+                        pf -> pf.getPost().getId(),
+                        Collectors.mapping(PostFile::getFileUrl, Collectors.toList())
+                ));
+
+        // 게시물 해시태그 일괄 조회 (N+1 해결)
+        List<PostHashTag> allPostHashTags = postHashTagRepository.findByPostIn(postPage.getContent());
+        Map<Long, List<String>> postHashTagMap = allPostHashTags.stream()
+                .collect(Collectors.groupingBy(
+                        pht -> pht.getPost().getId(),
+                        Collectors.mapping(pht -> pht.getHashTag().getHashTagName(), Collectors.toList())
+                ));
+
         return postPage.map(post -> {
             Long likeCount = likeCounts.getOrDefault(post.getId(), 0L);
             Long commentCount = commentCounts.getOrDefault(post.getId(), 0L);
 
-            List<String> hashTags = post.getHashTag().stream()
-                    .map(postHashTag -> postHashTag.getHashTag().getHashTagName())
-                    .collect(Collectors.toList());
+            // 미리 조회한 해시태그 목록 사용
+            List<String> hashTags = postHashTagMap.getOrDefault(post.getId(), Collections.emptyList());
 
             boolean isLiked = likedPostIds.contains(post.getId());
             String isLike = isLiked ? "Y" : "N";
@@ -301,7 +315,25 @@ public class PostService {
             boolean isFollowed = followingAuthorIds.contains(post.getUser().getId()) || loginUser.getId().equals(post.getUser().getId());
             String isFollow = isFollowed ? "Y" : "N";
 
-            return PostListResDto.fromEntity(post, likeCount, commentCount, hashTags, isLike, isFollow);
+            // 미리 조회한 파일 URL 사용
+            List<String> fileUrls = postFileMap.getOrDefault(post.getId(), Collections.emptyList());
+
+            // PostListResDto 생성 시 fileUrls 전달 (기존 fromEntity 수정 필요 또는 직접 빌더 사용)
+            return PostListResDto.builder()
+                    .userId(post.getUser().getId())
+                    .nickName(post.getUser().getNickName())
+                    .profileImage(post.getUser().getProfileImg())
+                    .postId(post.getId())
+                    .imageList(fileUrls) // 최적화된 파일 목록 사용
+                    .content(post.getContent())
+                    .likeCount(likeCount)
+                    .commentCount(commentCount)
+                    .createdTime(post.getCreatedTime())
+                    .isUpdate((post.getUpdatedTime() != null && !post.getUpdatedTime().equals(post.getCreatedTime())) ? "Y" : "N")
+                    .hashTag(hashTags)
+                    .isLike(isLike)
+                    .isFollow(isFollow)
+                    .build();
         });
     }
 
@@ -334,13 +366,28 @@ public class PostService {
         // 로그인한 유저가 팔로우한 작성자 ID 목록 조회 (N+1 해결)
         Set<Long> followingAuthorIds = followRepository.findFollowingUserIdsIn(loginUser.getId(), authorIds);
 
+        // 게시물 파일 일괄 조회 (N+1 해결)
+        List<PostFile> allPostFiles = postFileRepository.findByPostIn(postPage.getContent());
+        Map<Long, List<String>> postFileMap = allPostFiles.stream()
+                .collect(Collectors.groupingBy(
+                        pf -> pf.getPost().getId(),
+                        Collectors.mapping(PostFile::getFileUrl, Collectors.toList())
+                ));
+
+        // 게시물 해시태그 일괄 조회 (N+1 해결)
+        List<PostHashTag> allPostHashTags = postHashTagRepository.findByPostIn(postPage.getContent());
+        Map<Long, List<String>> postHashTagMap = allPostHashTags.stream()
+                .collect(Collectors.groupingBy(
+                        pht -> pht.getPost().getId(),
+                        Collectors.mapping(pht -> pht.getHashTag().getHashTagName(), Collectors.toList())
+                ));
+
         return postPage.map(post -> {
             Long likeCount = likeCounts.getOrDefault(post.getId(), 0L);
             Long commentCount = commentCounts.getOrDefault(post.getId(), 0L);
 
-            List<String> hashTags = post.getHashTag().stream()
-                    .map(postHashTag -> postHashTag.getHashTag().getHashTagName())
-                    .collect(Collectors.toList());
+            // 미리 조회한 해시태그 목록 사용
+            List<String> hashTags = postHashTagMap.getOrDefault(post.getId(), Collections.emptyList());
 
             boolean isLiked = likedPostIds.contains(post.getId());
             String isLike = isLiked ? "Y" : "N";
@@ -348,7 +395,24 @@ public class PostService {
             boolean isFollowed = followingAuthorIds.contains(post.getUser().getId()) || loginUser.getId().equals(post.getUser().getId());
             String isFollow = isFollowed ? "Y" : "N";
 
-            return PostListResDto.fromEntity(post, likeCount, commentCount, hashTags, isLike, isFollow);
+            // 미리 조회한 파일 URL 사용
+            List<String> fileUrls = postFileMap.getOrDefault(post.getId(), Collections.emptyList());
+
+            return PostListResDto.builder()
+                    .userId(post.getUser().getId())
+                    .nickName(post.getUser().getNickName())
+                    .profileImage(post.getUser().getProfileImg())
+                    .postId(post.getId())
+                    .imageList(fileUrls) // 최적화된 파일 목록 사용
+                    .content(post.getContent())
+                    .likeCount(likeCount)
+                    .commentCount(commentCount)
+                    .createdTime(post.getCreatedTime())
+                    .isUpdate((post.getUpdatedTime() != null && !post.getUpdatedTime().equals(post.getCreatedTime())) ? "Y" : "N")
+                    .hashTag(hashTags)
+                    .isLike(isLike)
+                    .isFollow(isFollow)
+                    .build();
         });
     }
 
@@ -363,8 +427,8 @@ public class PostService {
         // 게시물 좋아요 개수 조회
         Long postLikeCount = postRepository.countPostLikes(postId);
 
-        // 댓글 목록 조회
-        List<Comment> comments = commentRepository.findByPost(post);
+        // 댓글 목록 조회 (N+1 해결)
+        List<Comment> comments = commentRepository.findByPostWithUser(post);
         
         // 댓글 ID 목록 추출
         List<Long> commentIds = comments.stream().map(Comment::getId).collect(Collectors.toList());

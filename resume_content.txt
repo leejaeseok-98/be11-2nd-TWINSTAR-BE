@@ -1,0 +1,138 @@
+[옵션 1. 서술형 (스토리텔링 중심) - 직무 전문성/성장 과정]
+
+[사용자 경험을 극대화하는 성능 최적화와 데이터 정합성 확보]
+
+백엔드 개발자의 핵심 역량은 제한된 리소스 내에서 최대의 효율을 이끌어내고, 어떠한 상황에서도 데이터의 무결성을 지키는 데 있다고 생각합니다. 저는 프로젝트를 진행하며 시스템의 비효율을 개선하고 안정적인 서비스를 구축하는 과정에서 이러한 역량을 키워왔습니다.
+
+첫째, 비동기 병렬 처리를 도입하여 시스템 처리량을 극대화했습니다.
+게시물 작성 시 다수의 고화질 이미지를 순차적으로 업로드하는 과정에서 전체 응답 시간이 길어지는 병목 현상을 발견했습니다. 이를 해결하기 위해 Java의 CompletableFuture를 활용하여 이미지 업로드를 비동기 병렬 방식으로 전환했습니다. 특히, 무분별한 스레드 생성을 막기 위해 커스텀 ThreadPoolTaskExecutor를 구성하여 리소스를 격리했으며, 요청이 폭주할 경우를 대비해 CallerRunsPolicy를 적용하여 메인 스레드가 작업을 분담하게 함으로써 OOM(Out Of Memory)과 같은 시스템 과부하를 방지하고 안정성을 확보했습니다. 그 결과, 업로드 시간을 획기적으로 단축하여 사용자 경험(UX)을 크게 개선할 수 있었습니다.
+
+둘째, 분산 환경에서의 데이터 정합성을 위한 보상 트랜잭션을 구현했습니다.
+외부 스토리지(S3)와 데이터베이스가 분리된 환경에서, DB 저장 실패 시 S3에 불필요한 파일이 남는 문제가 발생했습니다. 저는 TransactionTemplate을 활용해 트랜잭션 범위를 정밀하게 제어하고, 예외 발생 시 catch 블록에서 업로드된 S3 파일을 즉시 삭제하는 보상 트랜잭션(Compensating Transaction) 로직을 설계했습니다. 이를 통해 예외 상황에서도 데이터 일관성을 유지하고 불필요한 스토리지 비용 낭비를 막았습니다.
+
+셋째, 쿼리 최적화를 통해 조회 성능을 개선했습니다.
+복잡한 연관 관계를 가진 게시물 목록 조회 시 N+1 문제가 발생하여 성능 저하가 우려되었습니다. 이를 해결하기 위해 IN 절을 활용하여 필요한 데이터를 한 번에 조회(Bulk Fetch)하고, 메모리 상에서 Map으로 매핑하여 데이터를 조립하는 방식으로 로직을 개선했습니다. 이를 통해 불필요한 I/O를 줄이고 API 응답 속도를 높였습니다.
+
+이러한 경험을 통해 기술은 단순히 기능을 구현하는 도구가 아니라, 비즈니스의 가치를 높이고 사용자에게 신뢰를 주는 핵심 수단임을 깨달았습니다. 입사 후에도 논리적인 사고로 시스템의 문제를 해결하는 엔지니어가 되겠습니다.
+
+--------------------------------------------------------------------------------
+
+[옵션 2. 개조식 (성과 중심) - 핵심 역량/프로젝트 경험]
+
+[핵심 역량: 대용량 트래픽 처리를 고려한 성능 최적화 및 안정성 확보]
+
+1. 비동기 병렬 아키텍처 설계를 통한 성능 개선
+- 문제: 다중 이미지 업로드 시 순차 처리로 인한 응답 지연 및 사용자 대기 시간 증가.
+- 해결: CompletableFuture와 커스텀 ThreadPool을 활용한 비동기 병렬 처리 로직 구현.
+- 심화: CallerRunsPolicy를 적용하여 스레드 풀 포화 시 메인 스레드가 작업을 처리하도록 유도, 트래픽 폭주 상황에서도 시스템이 셧다운되지 않도록 안정성(Fail-safe) 확보.
+- 성과: 이미지 업로드 속도 단축을 통한 UX 개선 및 시스템 전체 처리량(Throughput) 증대.
+
+2. 분산 트랜잭션 관리 및 데이터 무결성 보장
+- 문제: DB 트랜잭션 롤백 시 외부 스토리지(S3)에 파일이 잔존하는 데이터 불일치(Inconsistency) 발생.
+- 해결: TransactionTemplate을 통해 트랜잭션 경계를 명확히 하고, 예외 발생 시 S3 파일을 삭제하는 보상 트랜잭션(Compensating Transaction) 로직 구현.
+- 성과: 예외 상황에서도 데이터 정합성을 100% 유지하며 스토리지 비용 절감.
+
+3. 대량 데이터 조회 성능 최적화 (N+1 문제 해결)
+- 문제: 게시물 목록 조회 시 연관 엔티티(작성자, 좋아요, 댓글 등) 조회를 위한 반복적인 쿼리 발생.
+- 해결: IN 절을 활용한 Bulk Fetch로 쿼리 수를 최소화하고, 조회된 데이터를 Map<ID, Value> 구조로 가공하여 메모리 매핑 수행.
+- 성과: 데이터베이스 부하 감소 및 조회 API 응답 속도의 획기적 개선.
+
+--------------------------------------------------------------------------------
+
+[포트폴리오용 - 게시물 생성 성능 최적화]
+
+### 4. 게시물 생성 성능 최적화 (비동기 병렬 처리 & 트랜잭션 분리)
+
+> "네트워크 I/O와 DB 트랜잭션을 분리하여 응답 속도를 개선하고, 데이터 정합성을 확보하다"
+
+- **🔍 기능 개요**
+    - 게시물 작성 시 다수의 고화질 이미지를 S3에 업로드하는 과정에서 발생하는 응답 지연(Latency)과, 업로드 실패 시 DB와의 데이터 불일치 문제를 해결했습니다.
+- **🛠️ 핵심 구현 포인트**
+    - **비동기 병렬 처리**: `CompletableFuture`를 도입하여 순차적으로 처리되던 이미지 업로드를 병렬로 처리, 전체 소요 시간을 단축했습니다.
+    - **Custom ThreadPool**: `ThreadPoolTaskExecutor`를 별도로 구성하여 리소스를 격리하고, `CallerRunsPolicy`를 적용해 요청 폭주 시 시스템 안정성을 확보했습니다.
+    - **트랜잭션 분리 & 보상 트랜잭션**: `TransactionTemplate`을 사용해 DB 트랜잭션 범위를 최소화하고, DB 저장 실패 시 S3 파일을 삭제하는 롤백 로직을 구현했습니다.
+- **💡 기술적 선택의 이유 (Why)**
+    - **성능**: 순차 처리 시 `이미지 수 × 업로드 시간`만큼 지연되지만, 병렬 처리 시 `Max(업로드 시간)`에 가깝게 단축됩니다.
+    - **안정성**: S3 업로드(Network I/O)가 DB 트랜잭션을 길게 점유하는 것을 방지하여 DB 커넥션 고갈 문제를 예방했습니다.
+    - **정합성**: `@Transactional`만으로는 외부 리소스(S3)의 롤백이 불가능하므로, 명시적인 보상 트랜잭션(Compensating Transaction)이 필요했습니다.
+
+- **AS-IS (기존 코드)**
+
+```java
+@Transactional // 문제: S3 업로드 시간 동안 DB 트랜잭션(Connection)을 계속 점유함
+public void save(PostCreateReqDto dto) {
+    User user = getCurrentUser();
+    Post post = postRepository.save(dto.toEntity(user)); // 1. DB 저장
+
+    // 2. 이미지 순차 업로드 (여기서 시간 소요 발생)
+    for (MultipartFile file : dto.getImageFile()) {
+        String url = s3Service.upload(file); // Network I/O Blocking
+        postFileRepository.save(new PostFile(post, url));
+    }
+    // 만약 여기서 에러 발생 시 DB는 롤백되지만, S3에 올라간 파일은 그대로 남음 (고아 파일 발생)
+}
+```
+
+- **TO-BE (개선 코드)**
+
+```java
+// 1. S3 병렬 업로드 (DB 트랜잭션 진입 전 수행)
+// CompletableFuture를 사용하여 여러 이미지를 동시에 업로드합니다.
+List<CompletableFuture<UploadResult>> futures = dto.getImageFile().stream()
+        .map(file -> CompletableFuture.supplyAsync(() -> {
+            String fileName = UUID.randomUUID() + "_" + file.getOriginalFilename();
+            String fileUrl = uploadImage(file, fileName);
+            return new UploadResult(fileUrl, fileName);
+        }, imageUploadExecutor)) // 커스텀 스레드 풀 사용
+        .collect(Collectors.toList());
+
+// 모든 업로드가 끝날 때까지 대기 (Non-blocking에 가깝게 처리)
+List<UploadResult> uploadResults = futures.stream()
+        .map(CompletableFuture::join)
+        .collect(Collectors.toList());
+
+try {
+    // 2. DB 저장 (TransactionTemplate으로 트랜잭션 범위 최소화)
+    return transactionTemplate.execute(status -> {
+        Post post = postRepository.save(dto.toEntity(user));
+        
+        // 업로드된 결과로 PostFile 엔티티 일괄 저장
+        if (!uploadResults.isEmpty()) {
+            List<PostFile> postFiles = uploadResults.stream()
+                    .map(result -> new PostFile(post, result.getFileUrl()))
+                    .collect(Collectors.toList());
+            postFileRepository.saveAll(postFiles);
+        }
+        return post.getId();
+    });
+} catch (Exception e) {
+    // 3. 보상 트랜잭션 (DB 저장 실패 시 S3 파일 삭제)
+    for (UploadResult result : uploadResults) {
+        s3Client.deleteObject(...); // 업로드했던 파일 삭제
+    }
+    throw e;
+}
+```
+
+- **Thread Pool 설정 (AsyncConfig.java)**
+
+```java
+@Bean(name = "imageUploadExecutor")
+public Executor imageUploadExecutor() {
+    ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+    executor.setCorePoolSize(10); // 기본 스레드 수
+    executor.setMaxPoolSize(50);  // 최대 스레드 수
+    executor.setQueueCapacity(100); // 대기열 용량
+    executor.setThreadNamePrefix("S3-Upload-");
+    
+    // 중요: 큐가 꽉 찼을 때 Main Thread가 직접 처리하게 하여 속도 조절(Backpressure) 및 OOM 방지
+    executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+    executor.initialize();
+    return executor;
+}
+```
+
+- **문제 해결 요약**
+    - **병렬 처리**: `CompletableFuture`와 `Stream`을 활용해 N개의 이미지를 동시에 업로드하여 응답 속도를 획기적으로 개선했습니다.
+    - **리소스 격리**: 이미지 업로드 전용 `ThreadPool`을 생성하여, 업로드 요청이 몰려도 일반 비즈니스 로직에 영향을 주지 않도록 격리했습니다.
+    - **데이터 일관성**: `try-catch` 블록과 `TransactionTemplate`을 조합하여, DB 저장 실패 시 S3 파일을 삭제하는 보상 로직을 통해 고아 파일 생성을 방지했습니다.

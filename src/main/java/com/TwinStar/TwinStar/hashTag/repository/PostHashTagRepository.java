@@ -22,4 +22,6 @@ public interface PostHashTagRepository extends JpaRepository<PostHashTag,Long> {
     //    특정 포스트의 모든 해시태그 삭제
     void deleteByPost(Post post);
 
+    @Query("SELECT pht FROM PostHashTag pht JOIN FETCH pht.hashTag WHERE pht.post IN :posts")
+    List<PostHashTag> findByPostIn(@Param("posts") List<Post> posts);
 }
