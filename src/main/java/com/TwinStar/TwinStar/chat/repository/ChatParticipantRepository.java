@@ -29,4 +29,11 @@ public interface ChatParticipantRepository extends JpaRepository<ChatParticipant
             "JOIN cp.user u " +
             "WHERE cp.chatRoom = :chatRoom AND cp.isActive = true")
     List<ChatUserListDto> findActiveUsersByChatRoom(@Param("chatRoom") ChatRoom chatRoom);
+
+//    여러 채팅방의 참여자를 User 정보와 함께 일괄 조회 (N+1 문제 해결)
+    @Query("SELECT cp FROM ChatParticipant cp " +
+            "JOIN FETCH cp.user " +
+            "JOIN FETCH cp.chatRoom " +
+            "WHERE cp.chatRoom.id IN :chatRoomIds")
+    List<ChatParticipant> findAllByChatRoomIdsWithUser(@Param("chatRoomIds") List<Long> chatRoomIds);
 }

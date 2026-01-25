@@ -23,12 +23,16 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
 @Transactional
+
 public class ChatService {
     private final ChatRoomRepository chatRoomRepository;
     private final ChatParticipantRepository chatParticipantRepository;
@@ -99,11 +103,22 @@ public class ChatService {
 //        현재 유저의 참여중인 방 확인 (방 업데이트 내림차순 -> 최신순이라고 보면됨)
         List<ChatRoomResDto> participationRoomList = chatRoomRepository.findActiveChatRooms(user).orElseThrow(()-> new EntityNotFoundException("참여 중인 채팅방이 없습니다."));
 
+//        N+1 문제 해결: 모든 채팅방의 참여자를 한 번에 조회
+        List<Long> chatRoomIds = participationRoomList.stream()
+                .map(ChatRoomResDto::getRoomId)
+                .collect(Collectors.toList());
+
+        List<ChatParticipant> allParticipants = chatParticipantRepository.findAllByChatRoomIdsWithUser(chatRoomIds);
+
+//        채팅방 ID별로 참여자 그룹화
+        Map<Long, List<ChatParticipant>> participantsByChatRoom = allParticipants.stream()
+                .collect(Collectors.groupingBy(cp -> cp.getChatRoom().getId()));
+
 //        만약 1:1채팅방이면 상대방 닉네임으로 방제목 전달
 //        그 뭐야 방별로 그룹채팅인지 확인하고 아니면 참여자 리스트 만들어서 나 제외하고 상대 유저 닉네임으로 방제목, 이미지
 //        카톡마냥 그룹채팅방인데 나 혼자 있으면 대화 상대 없음으로하고 이미지 기본이미지
         participationRoomList.forEach(chatRoomResDto -> {
-            List<ChatParticipant> participantList =  chatParticipantRepository.findAllByChatRoomId(chatRoomResDto.getRoomId());
+            List<ChatParticipant> participantList = participantsByChatRoom.getOrDefault(chatRoomResDto.getRoomId(), new ArrayList<>());
             User you = participantList.stream()
                     .map(ChatParticipant::getUser)
                     .filter(u -> !u.getId().equals(user.getId()))
