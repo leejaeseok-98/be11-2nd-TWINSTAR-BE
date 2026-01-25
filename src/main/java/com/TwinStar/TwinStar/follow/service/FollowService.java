@@ -10,7 +10,6 @@ import com.TwinStar.TwinStar.user.domain.User;
 import com.TwinStar.TwinStar.follow.repository.FollowRepository;
 import com.TwinStar.TwinStar.user.dto.UserListResDto;
 import com.TwinStar.TwinStar.user.repository.UserRepository;
-import com.TwinStar.TwinStar.user.service.UserService;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -33,14 +32,12 @@ public class FollowService {
     private final UserRepository userRepository;
     private final AlarmService alarmService;
     private final AlarmRepository alarmRepository;
-    private final UserService userService;
 
-    public FollowService(FollowRepository followRepository, UserRepository userRepository, AlarmService alarmService, AlarmRepository alarmRepository, UserService userService) {
+    public FollowService(FollowRepository followRepository, UserRepository userRepository, AlarmService alarmService, AlarmRepository alarmRepository) {
         this.followRepository = followRepository;
         this.userRepository = userRepository;
         this.alarmService = alarmService;
         this.alarmRepository = alarmRepository;
-        this.userService = userService;
     }
 
     private User getCurrentUser() {
