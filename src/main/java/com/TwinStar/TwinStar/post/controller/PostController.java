@@ -34,7 +34,7 @@ public class PostController {
         return new ResponseEntity<>(new CommonDto(HttpStatus.OK.value(), "게시물 작성 완료",postId),HttpStatus.OK);
     }
 
-    @PostMapping("delete/{postId}")
+    @DeleteMapping("/{postId}")
     public ResponseEntity<?> delete(@PathVariable Long postId){
         log.info("[PostController] 게시물 삭제 요청 - postId: {}", postId);
         postService.delete(postId);
@@ -48,7 +48,7 @@ public class PostController {
         return new ResponseEntity<>(new CommonDto(HttpStatus.OK.value(), "게시물 데이터 반환",dto),HttpStatus.OK);
     }
 
-    @PostMapping("/update/{postId}")
+    @PatchMapping("/{postId}")
     public ResponseEntity<?> patchUpdate(@PathVariable Long postId, @RequestBody PostUpdateReqDto dto) {
         log.info("[PostController] 게시물 수정 요청 - postId: {}", postId);
         postService.Update(postId, dto); // postId가 있으면 기존 게시물 수정

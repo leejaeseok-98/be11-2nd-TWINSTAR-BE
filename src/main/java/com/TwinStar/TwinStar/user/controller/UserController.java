@@ -146,9 +146,9 @@ public class UserController {
     }
 
 //  6. 프로필 들어가면 정보를 얻는다.
-    @GetMapping("/detail/{receiveUserId}")
-    public ResponseEntity<?> userDetail(@PathVariable Long receiveUserId){
-        UserProfileDto dto = userProfileService.searchProfile(receiveUserId);
+    @GetMapping("/{userId}")
+    public ResponseEntity<?> userDetail(@PathVariable Long userId){
+        UserProfileDto dto = userProfileService.searchProfile(userId);
         return new ResponseEntity<>(new CommonDto(HttpStatus.OK.value(), "memberDetailLest is found",dto),HttpStatus.OK);
 
     }

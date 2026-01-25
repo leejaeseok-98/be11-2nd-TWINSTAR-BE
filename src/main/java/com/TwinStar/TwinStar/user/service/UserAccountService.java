@@ -2,6 +2,7 @@ package com.TwinStar.TwinStar.user.service;
 
 import com.TwinStar.TwinStar.common.exception.DuplicateEmailException;
 import com.TwinStar.TwinStar.common.exception.DuplicateNicknameException;
+import com.TwinStar.TwinStar.common.validation.UserValidator;
 import com.TwinStar.TwinStar.user.domain.User;
 import com.TwinStar.TwinStar.user.dto.PasswordChangeRequest;
 import com.TwinStar.TwinStar.user.dto.UserSaveReq;
@@ -34,6 +35,7 @@ public class UserAccountService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final RedisTemplate<String, Object> redisTemplate;
+    private final UserValidator userValidator;
 
     /**
      * 회원가입
@@ -118,26 +120,12 @@ public class UserAccountService {
         user.validateSelf(currentUser);
         user.validatePassword(request.getCurrentPassword(), passwordEncoder);
 
-        // 새 비밀번호 정책 검증
-        if (!isValidPassword(request.getNewPassword())) {
-            throw new IllegalArgumentException("비밀번호가 보안 정책을 충족하지 않습니다.");
-        }
+        // 새 비밀번호 정책 검증 (통합 Validator 사용)
+        userValidator.validatePassword(request.getNewPassword());
 
         // 비밀번호 변경
         user.changePassword(request.getNewPassword(), passwordEncoder);
         log.info("[UserAccountService] 비밀번호 변경 완료 - userId: {}", user.getId());
-    }
-
-    /**
-     * 비밀번호 정책 검증
-     * - 최소 8자 이상
-     * - 숫자 포함
-     * - 특수문자 포함
-     */
-    private boolean isValidPassword(String password) {
-        return password.length() >= 8
-            && password.matches(".*[0-9].*")
-            && password.matches(".*[!@#$%^&*()].*");
     }
 
     /**

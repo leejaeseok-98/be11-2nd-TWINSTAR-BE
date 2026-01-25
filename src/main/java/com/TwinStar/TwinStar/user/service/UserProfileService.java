@@ -21,6 +21,9 @@ import com.TwinStar.TwinStar.user.repository.UserRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -102,8 +105,10 @@ public class UserProfileService {
         // 프로필 이미지 URL 설정
         String profileImgUrl = (targetUser.getProfileImg() != null) ? targetUser.getProfileImg() : DEFAULT_PROFILE_IMG;
 
-        // 게시물 목록과 파일 정보를 함께 조회 (N+1 문제 해결)
-        List<Post> posts = postRepository.findByUserIdWithFiles(receiveUserId);
+        // 게시물 목록과 파일 정보를 함께 조회 (N+1 문제 해결, 페이지네이션 적용)
+        // 최신 20개만 조회하여 OutOfMemoryError 방지
+        Pageable pageable = PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "createdTime"));
+        List<Post> posts = postRepository.findByUserIdWithFiles(receiveUserId, pageable).getContent();
         if (posts.isEmpty()) {
             return UserProfileDto.profileSearch(targetUser, followerCount, followingCount, profileImgUrl, new ArrayList<>());
         }

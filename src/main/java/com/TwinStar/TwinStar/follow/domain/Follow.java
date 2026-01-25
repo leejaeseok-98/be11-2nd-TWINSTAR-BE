@@ -16,7 +16,6 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-@Table(name = "follow")
 public class Follow {
     @Id@GeneratedValue(strategy = GenerationType.IDENTITY)
     private long id;
